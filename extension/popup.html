@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhishGuard</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-title">
+        <span class="header-icon">🛡️</span>
+        <span class="header-name">PhishGuard</span>
+      </div>
+      <div class="status-row">
+        <span class="status-dot" id="status-dot"></span>
+        <span class="status-text" id="status-text">Checking backend…</span>
+      </div>
+    </header>
+
+    <!-- URL Checker -->
+    <div class="checker-section">
+      <label class="input-label" for="url-input">Check a URL manually:</label>
+      <div class="input-row">
+        <input
+          type="url"
+          id="url-input"
+          class="url-input"
+          placeholder="https://example.com"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="check-btn" id="check-btn">Check</button>
+      </div>
+      <p class="input-hint">Must start with http:// or https://</p>
+    </div>
+
+    <!-- Result area -->
+    <div id="result-area" class="result-area" style="display:none"></div>
+
+    <!-- Loading -->
+    <div id="loading" class="loading" style="display:none">
+      <div class="spinner"></div>
+      <span>Analyzing…</span>
+    </div>
+
+    <!-- Error -->
+    <div id="error-area" class="error-area" style="display:none"></div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <a href="#" id="settings-link">⚙ Settings</a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

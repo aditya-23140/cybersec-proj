@@ -1,0 +1,196 @@
+# IMPLEMENTATION PROMPT 2: CHROME MANIFEST V3 PHISHING PROTECTION EXTENSION
+
+## Objective
+
+Build the mandatory Chrome browser extension for the URL Phishing Detection and Prevention System.
+
+The extension must use a real XGBoost prediction service hosted by the shared FastAPI backend. Its main purpose is to warn users before they navigate to a potentially malicious URL.
+
+Follow the Master Prompt, the shared API contract, and the attached IEEE Access research paper.
+
+## Phase 1: Inspect and plan before coding
+
+Before modifying files:
+1. Inspect the existing extension repository, manifest, JavaScript files, permissions, and backend availability.
+2. Identify the supported Chrome version and any existing implementation.
+3. Write an implementation plan with file structure, click interception strategy, API integration, warning UI, permissions, error handling, tests, and acceptance criteria.
+4. Explicitly identify browser security constraints and link types that cannot be intercepted reliably.
+5. Wait for approval of the plan unless implementation is already authorized under an approved plan.
+
+Do not replace the existing extension blindly or generate every file without a plan.
+
+## Phase 2: Technology and architecture
+
+Use:
+- Chrome Extension Manifest V3.
+- JavaScript.
+- HTML and CSS for the popup and warning interface.
+- The shared FastAPI prediction endpoint.
+- Minimal permissions.
+- No unnecessary frontend framework.
+
+Use the backend base URL from a configurable extension setting where practical. Default to http://127.0.0.1:8000 for local development.
+
+Do not embed the model in JavaScript, reproduce the classifier in the extension, or hardcode prediction outcomes.
+
+## Phase 3: Core behavior
+
+Implement a clear, functional extension with:
+
+### A. Popup
+Show:
+- Extension status.
+- Backend connectivity status.
+- A URL input for manual checks.
+- A button that sends a URL to the real prediction API.
+- The returned risk level and probability.
+- Relevant warnings and model version.
+- A clear error state when the backend is unavailable.
+
+### B. Link-click protection
+
+For eligible HTTP and HTTPS links on ordinary web pages:
+1. Detect the user's click on a candidate link.
+2. Read the destination URL without collecting unrelated page content.
+3. Validate the destination and reject unsupported schemes such as javascript:, data:, and file: from ordinary URL scanning.
+4. Send the URL to POST /api/v1/predict.
+5. Apply the returned risk assessment and the agreed application risk policy.
+6. Allow ordinary navigation to proceed for safe results.
+7. Show a warning before navigation for suspicious or dangerous results.
+8. Offer a clear choice to return to safety or continue to the destination.
+9. Avoid duplicate warnings, repeated requests, and unintended navigation.
+
+The warning must clearly explain that the URL appears risky and that classification can be wrong. Do not describe the destination as confirmed malicious unless that conclusion is supported by independent evidence.
+
+Handle loading states, API timeouts, invalid responses, and backend failures.
+
+If the service is unavailable, display an honest warning that protection could not complete. Do not mark the URL safe simply because the request failed.
+
+Do not silently change the target URL or discard its query parameters.
+
+### C. Risk presentation
+
+Use the shared risk labels:
+- safe
+- suspicious
+- dangerous
+
+Use clear text and icons in addition to color.
+
+Display the phishing probability only as the model's estimated score, not as a calibrated guarantee that a URL is malicious.
+
+If the backend supplies a warning because a feature was unavailable, display that limitation where relevant.
+
+### D. User preferences
+
+Provide a minimal settings interface where practical:
+- Backend URL.
+- Warning behavior.
+- Optional trusted-domain preferences if they can be implemented safely.
+
+Do not implement an allowlist that silently overrides high-risk results without clearly distinguishing user preferences from model evidence.
+
+## Phase 4: Security and browser compatibility
+
+- Use Manifest V3 and follow Chrome's extension security restrictions.
+- Request only the permissions needed for the implemented features.
+- Avoid remote code execution, remotely hosted JavaScript, and unnecessary host permissions.
+- Handle URL parsing, internationalized domains, encoded paths, query strings, fragments, and malformed links.
+- Avoid intercepting password fields, reading credentials, collecting cookies, or transmitting page content.
+- Do not attempt to inspect browser-internal pages or protected Chrome URLs.
+- Do not claim to protect every navigation. Document limitations involving address-bar navigation, redirects, new tabs, downloads, iframes, special pages, and pages where scripts cannot run.
+- Treat API responses as untrusted data and render messages safely.
+- Ensure users cannot accidentally bypass a warning because of an unhandled exception or a malformed response.
+
+If implementing click interception, make the navigation decision predictable and testable. Prevent duplicate click handlers from causing multiple API requests. Provide a safe fallback when the request times out, and make the protection limitation visible.
+
+## Phase 5: Shared API integration
+
+Use the established endpoint:
+
+POST /api/v1/predict
+
+Request:
+{"url":"https://example.com"}
+
+Expected response fields:
+- request_id
+- url
+- prediction
+- risk_level
+- phishing_probability
+- model_version
+- warnings
+- explanation
+
+Validate the response before using it. Handle non-2xx status codes and unexpected payloads.
+
+Do not create a separate extension-only risk classification algorithm. Keep risk policy consistent with the web app.
+
+If the backend uses cookie-based authentication for user-specific features, do not assume extension-origin requests can automatically share website cookies. Keep public URL prediction independent of authentication unless there is a justified requirement.
+
+## Phase 6: Suggested file structure
+
+extension/
+  manifest.json
+  popup.html
+  popup.css
+  popup.js
+  content.js
+  background.js
+  warning.html
+  warning.css
+  warning.js
+  settings.html
+  settings.js
+  README.md
+  tests/
+
+Use only the files that are needed. Keep DOM rendering, API communication, URL validation, and click-handling logic separated where doing so improves traceability. Do not introduce redundant abstractions.
+
+## Phase 7: Testing
+
+Test:
+- Manifest validity and extension loading.
+- Popup manual URL checks.
+- Safe, suspicious, and dangerous responses.
+- Backend unavailable and timeout scenarios.
+- Malformed URLs and unsupported schemes.
+- Warning confirmation and return-to-safety behavior.
+- URL query and fragment preservation.
+- Duplicate click handling.
+- Malformed API responses.
+- Basic keyboard accessibility.
+- Security-sensitive DOM rendering.
+
+Use mocked API responses for isolated UI tests, but also run a real integration test against the actual backend and trained model.
+
+Do not use mocked responses to claim the complete extension works with the model.
+
+## Phase 8: Installation and demonstration
+
+Document the exact steps:
+1. Start the FastAPI backend.
+2. Confirm the model is loaded.
+3. Open chrome://extensions.
+4. Enable Developer mode.
+5. Load the extension directory as an unpacked extension.
+6. Test a URL through the popup.
+7. Test the warning flow on a controlled demonstration page.
+8. Explain how to return to safety and continue to a destination.
+
+Use safe test fixtures and known labeled URLs where possible. Do not deliberately visit dangerous live phishing websites to demonstrate the warning flow.
+
+## Phase 9: Completion report
+
+Report:
+- Files created or modified.
+- Required permissions and why they are needed.
+- Installation steps.
+- Supported link types.
+- Actual API integration results.
+- Test results.
+- Known protection limitations.
+- Any remaining issues.
+
+Do not claim complete protection until the actual click-warning flow has been verified in Chrome.

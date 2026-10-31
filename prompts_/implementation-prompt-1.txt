@@ -1,0 +1,206 @@
+# IMPLEMENTATION PROMPT 1: XGBOOST URL PHISHING DETECTION MODEL
+
+## Objective
+
+Implement the mandatory ML component for the URL Phishing Detection and Prevention System. Deliver a reproducible Python training pipeline, a trained XGBoost artifact, consistent feature extraction, model evaluation, and a prediction interface that can be loaded by FastAPI.
+
+Follow the Master Prompt and the attached IEEE Access paper, "XGBoost-Based URL Phishing Detection Method With Cross-Dataset Validation" (2026).
+
+## Phase 1: Inspect and plan before coding
+
+Before changing any files:
+1. Inspect the repository, Python environment, existing dependencies, datasets, and current model code.
+2. Identify whether a usable dataset and feature extraction pipeline already exist.
+3. Produce a written implementation plan containing dataset choices, data preparation, feature schema, training/evaluation methodology, expected files, dependencies, tests, risks, and acceptance criteria.
+4. Highlight any feature or dataset incompatibility that could invalidate training or deployment.
+5. Wait for plan approval before implementing, unless implementation under an already-approved plan is authorized.
+
+Do not begin with a large code dump.
+
+## Phase 2: Dataset strategy
+
+Use accessible datasets that can be obtained and processed within the deadline. Investigate suitable public sources, including the sources discussed in the paper, where accessible:
+- PhishTank
+- AdaURL
+- Kaggle Phishing URLs Dataset
+- PhishDataset
+- GramBeddings
+- PhiUSIIL
+
+Do not assume these datasets share the same schema. Inspect their actual contents, labels, feature definitions, licenses, sizes, and download requirements before selecting them.
+
+Select a dataset or compatible combination that permits a working end-to-end demonstration by the deadline. Document why it was selected and which research datasets could not be used.
+
+Create a reproducible data preparation pipeline that:
+- Maps source labels into consistent benign/phishing labels.
+- Removes invalid records and handles missing values.
+- Identifies exact duplicate URLs and conflicting labels.
+- Reduces duplicate leakage across training and test splits where practical.
+- Reports class distributions and dropped-record counts.
+- Separates training, validation, and test data.
+- Uses independent-source testing when feasible.
+- Does not download or visit every submitted URL as part of training.
+
+Never fabricate records, labels, datasets, or experimental results.
+
+## Phase 3: Feature engineering
+
+First inspect the feature definitions in the paper, particularly its final eight features:
+- length_url
+- qty_hyphens_path
+- has_brand_keyword
+- subdomain_count
+- qty_nameservers
+- qty_dots_url
+- is_spf_domain
+- time_domain_activation
+
+Determine which are actually available in the chosen dataset and which can be computed from a URL alone.
+
+Do not silently replace a paper feature with a differently defined feature while retaining the original name. If the selected dataset cannot support the exact feature set, document the deviation and define a consistent, justified feature schema suitable for deployment.
+
+Implement feature extraction in a reusable module. It must:
+- Accept a URL or normalized URL input according to a documented interface.
+- Parse URLs defensively.
+- Handle missing schemes, internationalized domains, ports, query strings, fragments, percent-encoding, IP-address hosts, and malformed inputs.
+- Use deterministic calculations for lexical features.
+- Define explicit behavior for missing or unavailable network-derived features.
+- Never make unsafe external requests as a side effect of ordinary feature extraction.
+- Return a fixed schema with stable feature names, order, and types.
+
+If DNS, SPF, WHOIS, or domain-age enrichment is included, isolate it behind an explicit interface, use strict timeouts, and document its failure behavior. Do not assume network access or data availability.
+
+The training and inference paths must use the same feature extraction implementation.
+
+## Phase 4: Train XGBoost
+
+Implement a configurable training pipeline using XGBoost and scikit-learn.
+
+Requirements:
+- Fix random seeds where supported.
+- Use an appropriate stratified split for in-distribution evaluation.
+- Prevent target leakage and train/test overlap.
+- Handle class imbalance using measured class distributions and appropriate weighting when justified.
+- Use a simple, bounded hyperparameter search if time permits.
+- Prefer a reliable baseline over an unfinished, expensive optimization process.
+- Avoid scaling or transformations that are unnecessary for tree-based models.
+- Persist the trained model and its feature schema together with version metadata.
+- Keep dataset paths, hyperparameters, random seed, and output paths configurable.
+
+The main training script must run using documented commands and must fail clearly when required data is missing.
+
+## Phase 5: Evaluation and threshold selection
+
+Generate actual evaluation results from the trained model. Include:
+- Accuracy.
+- Precision.
+- Recall.
+- F1 score.
+- Confusion matrix.
+- ROC-AUC when supported by the test labels and predicted scores.
+- False-positive and false-negative counts.
+- Class distribution.
+- Training duration and artifact size where practical.
+
+Choose the risk thresholds using validation data and a documented decision rule. Consider the practical cost of false negatives and false positives. Do not optimize thresholds on the final test set.
+
+Use cross-dataset evaluation when compatible independent data is available. If not, explicitly report the limitation.
+
+Do not claim the paper's reported accuracy or F1 score as the project's result. Generate charts or a report only from real experimental outputs.
+
+## Phase 6: Prediction interface
+
+Create a small reusable inference module that:
+- Loads the trained model once.
+- Validates incoming URLs.
+- Calls the shared feature extractor.
+- Produces a phishing probability or documented confidence score.
+- Applies configurable risk thresholds.
+- Returns the prediction, risk level, model version, warnings, and a short evidence-based explanation.
+- Handles invalid input, missing artifacts, missing features, and model failures explicitly.
+
+Use the shared contract:
+
+POST /api/v1/predict
+
+Request:
+{"url":"https://example.com"}
+
+Response:
+{
+  "request_id":"unique-request-id",
+  "url":"https://example.com",
+  "prediction":"benign",
+  "risk_level":"safe",
+  "phishing_probability":0.12,
+  "model_version":"version-string",
+  "warnings":[],
+  "explanation":"Short, evidence-based explanation"
+}
+
+The example values illustrate the schema only. Never hardcode them as a real prediction.
+
+Risk levels are safe, suspicious, and dangerous. Define configurable thresholds in one location. Allowlist/blocklist decisions belong to the application risk policy and must not be confused with the raw model output.
+
+## Phase 7: Required project artifacts
+
+Produce an organized structure similar to:
+
+ml/
+  README.md
+  requirements.txt
+  config.py
+  data/
+    README.md
+  src/
+    data_loader.py
+    data_validation.py
+    preprocessing.py
+    feature_extractor.py
+    train.py
+    evaluate.py
+    predict.py
+    model_registry.py
+  artifacts/
+    .gitkeep
+  reports/
+    .gitkeep
+  tests/
+    test_features.py
+    test_training.py
+    test_prediction.py
+
+Adapt this structure to the existing repository instead of duplicating an existing backend or creating conflicting implementations.
+
+The final artifact should include the trained model, metadata, and feature schema. Never commit huge raw datasets unless explicitly required. Document artifact paths and ensure the backend can load the model.
+
+## Phase 8: Tests
+
+Write tests for:
+- URL parsing and malformed inputs.
+- Feature names, order, types, and determinism.
+- Missing-value behavior.
+- Consistency between training and inference features.
+- Artifact save/load.
+- Prediction response schema and probability range.
+- Threshold behavior.
+- Invalid URLs and missing model files.
+- Data leakage safeguards that are practical to test.
+
+Run the tests and report the actual results.
+
+## Phase 9: Completion report
+
+At completion, provide:
+1. Files created or modified.
+2. Dataset provenance and license notes.
+3. Exact training command.
+4. Exact evaluation command.
+5. Exact prediction/test command.
+6. Actual measured evaluation metrics.
+7. Model artifact path and size.
+8. Known limitations.
+9. Exact backend integration requirements.
+10. Outstanding issues.
+
+Do not declare this module complete until a trained model artifact exists and a real prediction has been tested.

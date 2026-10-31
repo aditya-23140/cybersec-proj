@@ -1,0 +1,314 @@
+# IMPLEMENTATION PROMPT 3: COMPLETE URL PHISHING DETECTION WEB APPLICATION
+
+## Objective
+
+Build the web application and shared backend for the URL Phishing Detection and Prevention System.
+
+The application must integrate with the trained XGBoost model and support the Chrome extension through a shared FastAPI prediction service.
+
+Required web modules:
+1. URL checker.
+2. Statistics dashboard.
+3. User accounts and administrator roles.
+4. Scan history.
+5. Allowlist and blocklist management.
+6. Community forum with posts and replies.
+7. Phishing prevention and security education.
+
+Prioritize a fully working local demonstration over unnecessary production infrastructure.
+
+## Phase 1: Inspect and plan before coding
+
+Before changing files:
+1. Inspect the repository, existing Next.js application, FastAPI backend, ML model artifact, dependencies, routes, database, and environment configuration.
+2. Identify working features and existing code to preserve.
+3. Verify the model integration contract and current API responses.
+4. Write a module-by-module implementation plan, including architecture, database schema, API endpoints, authentication, frontend routes, security requirements, tests, and acceptance criteria.
+5. Identify the smallest implementation that meets every mandatory requirement.
+6. Wait for plan approval unless the work is already authorized under an approved plan.
+
+Do not generate an entire new application if a working repository already exists.
+
+## Phase 2: Technology and architecture
+
+Use:
+- Next.js with JavaScript for the web frontend.
+- Python FastAPI for backend routes and shared services.
+- XGBoost through the existing ML inference module.
+- SQLite for local persistence.
+- A suitable lightweight ORM or database-access layer if it meaningfully improves maintainability.
+- A secure password-hashing library.
+- pytest for backend tests and the existing frontend testing framework where available.
+
+Default local services:
+- Frontend: http://localhost:3000
+- Backend: http://127.0.0.1:8000
+
+Make service URLs configurable through environment variables. Do not hardcode deployment secrets.
+
+Keep model inference in the Python backend. The Next.js application must call the prediction API rather than importing the model or implementing a second classifier.
+
+## Phase 3: Required frontend pages
+
+### A. Home and URL checker
+
+Build a clear landing page explaining the product and its limitations.
+
+The URL checker must:
+- Accept a URL as user input.
+- Validate input and reject unsupported schemes.
+- Send the URL to the actual backend prediction endpoint.
+- Display the risk level, phishing probability, model version, warnings, and explanation returned by the backend.
+- Distinguish model predictions from allowlist/blocklist matches.
+- Display loading, invalid-input, timeout, backend-unavailable, and error states.
+- Avoid claiming that a URL is safe with certainty.
+
+The URL checker is the primary demonstration path. Complete and test it before spending time on decorative sections.
+
+### B. Statistics dashboard
+
+Build a responsive dashboard using actual backend data.
+
+Include appropriate statistics such as:
+- Total scans.
+- Benign, suspicious, and dangerous classifications.
+- Recent scan activity.
+- Distribution of risk levels.
+- Model version and available evaluation metrics.
+- Optional false-positive and false-negative counts from recorded evaluation results, clearly distinguished from live scan counts.
+
+All statistics must come from database queries or genuine model evaluation artifacts.
+
+Do not hardcode impressive counts, generate fake chart data, or mix synthetic seed data with live statistics without clear labeling.
+
+Implement sensible empty states when there are no scans.
+
+### C. Authentication and authorization
+
+Implement:
+- Registration.
+- Login.
+- Logout.
+- Current-user retrieval.
+- User and administrator roles.
+- Protected pages and API routes.
+
+Use secure password hashing. Apply sensible password validation, session protection, and login error handling.
+
+For local development, choose a simple secure session design. Prefer HttpOnly, appropriately configured cookies over storing long-lived authentication tokens in localStorage. Apply CSRF protections appropriate to the chosen cookie-based approach.
+
+Do not trust a role supplied by the frontend. Verify authorization on the backend.
+
+Provide a straightforward way to create or seed a local administrator account without committing default production credentials.
+
+### D. Scan history
+
+Authenticated users must be able to:
+- View their own previous scans.
+- See the original submitted URL, risk level, probability, timestamp, and model version.
+- Open a scan detail view.
+- Filter or search recent results where practical.
+
+Enforce user ownership on the backend. One user must not be able to access another user's scan history by modifying a URL or identifier.
+
+Avoid storing sensitive URL query parameters indefinitely without a clear need. Document the retention behavior.
+
+### E. Allowlist and blocklist
+
+Users must be able to:
+- Add a domain or host to their personal allowlist.
+- Remove entries.
+- Add a domain or host to their personal blocklist.
+- Remove entries.
+- View the source of a risk decision.
+
+Normalize domains consistently, validate inputs, and reject malformed entries.
+
+Do not use naive substring matching. A trusted entry for example.com must not automatically trust attacker-example.com.
+
+For URLs containing credentials, unexpected ports, IP literals, internationalized domains, or deceptive subdomains, apply explicit validation and document the chosen policy.
+
+Keep model output, reputation-list decisions, and user preferences separate. A whitelist override must never rewrite the raw model prediction or fabricate model evidence.
+
+### F. Community forum
+
+Build a minimal but functional forum with:
+- Listing posts.
+- Creating posts.
+- Viewing post details.
+- Adding replies.
+- Authenticated participation.
+- Author information and timestamps.
+- Validation and safe rendering.
+- Appropriate edit/delete permissions if these actions are included.
+
+Apply authorization on the backend. Escape user-controlled content, prevent stored cross-site scripting, validate lengths, and avoid rendering arbitrary HTML.
+
+Do not seed fake user conversations that appear to be genuine community activity.
+
+### G. Educational section
+
+Include useful educational content covering:
+- Common phishing URL patterns.
+- Suspicious domains and subdomains.
+- Homoglyphs and lookalike characters.
+- URL shorteners and redirects.
+- Why HTTPS alone does not guarantee trustworthiness.
+- How to inspect links safely.
+- What model confidence means.
+- Why false positives and false negatives occur.
+- How to respond to a suspicious link.
+
+Write the material clearly and avoid unsupported claims.
+
+## Phase 4: Shared backend and API contract
+
+Inspect the existing backend before creating routes. Reuse the established prediction module and shared contract.
+
+Mandatory endpoint:
+
+POST /api/v1/predict
+
+Request:
+{"url":"https://example.com"}
+
+Response fields:
+- request_id
+- url
+- prediction
+- risk_level
+- phishing_probability
+- model_version
+- warnings
+- explanation
+
+The endpoint must use the actual loaded model and the training-compatible feature extractor.
+
+Implement or integrate:
+- GET /api/v1/health
+- GET /api/v1/model-info
+- GET /api/v1/stats
+- POST /api/v1/auth/register
+- POST /api/v1/auth/login
+- POST /api/v1/auth/logout
+- GET /api/v1/history
+- GET /api/v1/allowlist
+- POST /api/v1/allowlist
+- DELETE /api/v1/allowlist/{id}
+- GET /api/v1/blocklist
+- POST /api/v1/blocklist
+- DELETE /api/v1/blocklist/{id}
+- GET /api/v1/forum/posts
+- POST /api/v1/forum/posts
+- GET /api/v1/forum/posts/{id}/replies
+- POST /api/v1/forum/posts/{id}/replies
+
+Add any necessary endpoints for current-user information, post details, pagination, and authorization.
+
+Define Pydantic request and response schemas. Use consistent error responses, status codes, validation, and API versioning.
+
+The prediction endpoint should remain usable by the extension without requiring a user login. User-specific features may require authentication.
+
+Do not create a second classifier or duplicate risk thresholds in frontend components.
+
+## Phase 5: Database design
+
+Use SQLite for the local demo. Design a clear schema for:
+- Users and roles.
+- Scan history.
+- Allowlist entries.
+- Blocklist entries.
+- Forum posts.
+- Forum replies.
+
+Add appropriate primary keys, foreign keys, unique constraints, timestamps, and indexes where useful.
+
+Ensure scan records can be associated with authenticated users or stored as anonymous scans only under a clearly documented policy.
+
+Implement database initialization and migrations or a documented schema initialization process. The application must start from a clean database without manual undocumented edits.
+
+Never store passwords in plaintext.
+
+## Phase 6: Frontend design and usability
+
+Create a cohesive, responsive interface with:
+- Consistent typography, spacing, and navigation.
+- Clear safe, suspicious, and dangerous states.
+- Readable result cards.
+- Useful forms and validation.
+- Accessible labels, keyboard interaction, and visible focus states.
+- Loading, empty, error, and success states.
+- Functional navigation and buttons.
+- Reasonable desktop and mobile layouts.
+
+Use a chart library only if necessary and compatible with the existing project. Do not spend time on animations or complex visual effects before core functionality works.
+
+Do not use a dashboard template that merely looks complete while showing fabricated data.
+
+## Phase 7: Security and privacy
+
+- Validate all backend inputs, including URLs and forum submissions.
+- Apply authentication and authorization server-side.
+- Protect user-owned records.
+- Hash passwords securely.
+- Use secure session handling.
+- Configure CORS for the intended local origins.
+- Avoid exposing stack traces or secrets in client responses.
+- Avoid arbitrary URL fetching from the prediction endpoint.
+- If a future enrichment feature fetches URLs or resolves domains, implement SSRF and DNS-rebinding safeguards.
+- Use safe URL parsing and domain matching.
+- Avoid storing unnecessary sensitive URL information.
+- Make limitations of URL-only classification visible to users.
+- Never claim that the app provides complete phishing protection.
+
+## Phase 8: Testing and verification
+
+Write and run tests for:
+- Health and model-info endpoints.
+- Real model prediction and response schema.
+- Invalid URL handling.
+- Registration, login, logout, and protected routes.
+- Password storage.
+- User data isolation.
+- Scan history persistence.
+- Allowlist and blocklist CRUD.
+- Correct domain matching.
+- Forum creation and replies.
+- Forum input validation and XSS defenses.
+- Dashboard statistics based on real records.
+- Empty database behavior.
+- Database initialization.
+- Frontend URL-checker integration.
+- Backend-unavailable behavior.
+
+Use mocks only for isolated tests. Run at least one integration test against the actual trained model.
+
+## Phase 9: Local startup and integration
+
+Document the exact commands for:
+1. Creating the Python environment.
+2. Installing backend dependencies.
+3. Preparing the database.
+4. Training the model if the artifact does not exist.
+5. Starting FastAPI.
+6. Installing frontend dependencies.
+7. Starting Next.js.
+8. Loading the Chrome extension.
+9. Verifying model availability.
+10. Running the end-to-end demo.
+
+Keep the backend, frontend, and extension configuration consistent. Avoid requiring cloud credentials or external paid services.
+
+## Phase 10: Completion report
+
+Report:
+- Files created or modified.
+- Frontend and backend startup commands.
+- Required environment variables.
+- Database setup and administrator bootstrap.
+- Implemented routes and pages.
+- Test commands and actual results.
+- Real model integration status.
+- Remaining bugs and known limitations.
+- A short demonstration sequence.
+

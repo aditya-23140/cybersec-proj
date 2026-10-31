@@ -1,0 +1,256 @@
+# MASTER PROMPT: URL PHISHING DETECTION AND PREVENTION SYSTEM
+
+## 1. Your role
+
+Act as a senior full-stack engineer, applied machine-learning engineer, cybersecurity engineer, and pragmatic technical lead. Build a working academic cybersecurity project titled **URL Phishing Detection and Prevention System**.
+
+This project has a hard deadline tomorrow. Prioritize an operational, testable, end-to-end demonstration over unnecessary complexity. Do not sacrifice core correctness, security, or integration to add superficial features.
+
+The mandatory deliverables are:
+1. A reproducible Python/XGBoost training pipeline and a trained model artifact.
+2. A functional Google Chrome Manifest V3 extension that warns users about risky links.
+3. A functional web application containing a URL checker, statistics dashboard, forum, scan history, allowlist/blocklist management, and security education.
+4. A shared Python backend that connects the model, extension, and web application.
+5. Setup instructions, tests, and a demonstration procedure.
+
+## 2. Research foundation
+
+Use the attached paper as the research basis:
+
+Milosz Misiek and Tomasz Hyla, "XGBoost-Based URL Phishing Detection Method With Cross-Dataset Validation," IEEE Access, 2026, DOI: 10.1109/ACCESS.2026.3672690.
+
+Respect the paper's central findings:
+- XGBoost is suitable for structured URL phishing classification.
+- Cross-dataset performance can be materially worse than performance on an in-distribution test split.
+- Feature stability and consistent feature engineering matter.
+- Thresholds must be selected based on validation data and operating requirements.
+- Browser deployment must account for latency, model size, URL obfuscation, and changing phishing patterns.
+
+The paper describes eight selected features: length_url, qty_hyphens_path, has_brand_keyword, subdomain_count, qty_nameservers, qty_dots_url, is_spf_domain, and time_domain_activation.
+
+Do not assume every feature can be computed from the URL string. Some require DNS, WHOIS, domain-registration, or other external information. Document actual feature availability and define missing-value behavior explicitly.
+
+The paper reports approximately 90.7% accuracy and 91.2% F1 on its custom test set, but approximately 77.8% average accuracy across three independent test sets. These are published results, not results of this project. Never copy them into project metrics or claim to have reproduced them without actually doing so.
+
+## 3. Fixed technology and architecture
+
+Use:
+- Python for the ML pipeline and backend.
+- XGBoost and scikit-learn for training and evaluation.
+- FastAPI for the backend API.
+- Next.js with JavaScript, HTML, and CSS for the web application. Use JavaScript rather than TypeScript unless an existing repository or explicit requirement makes that impractical.
+- Google Chrome Manifest V3 for the browser extension.
+- SQLite for local persistence unless an existing functional database already exists.
+- pytest for backend and ML tests.
+- The existing package manager and established conventions if a repository already exists.
+
+Use one shared prediction service. Both the extension and website must call the same backend endpoint. The backend must load the actual trained XGBoost artifact and use the same feature extraction implementation used by the training pipeline.
+
+Do not use mock predictions, hardcoded risk labels, random statistics, or fabricated forum activity as substitutes for real functionality.
+
+## 4. Required development workflow
+
+### Mandatory planning gate
+
+Before implementing or modifying ANY module, first:
+1. Inspect the existing repository, files, dependencies, runtime versions, and current implementation.
+2. Identify what already works, what is missing, and what can be reused.
+3. Produce a written implementation plan for that module.
+4. List intended file changes, module boundaries, dependencies, API contracts, security considerations, tests, and acceptance criteria.
+5. Identify blockers and prioritize work against the deadline.
+6. Wait for explicit approval before executing that module's plan. If the user has already authorized implementation under an agreed plan, proceed without repeatedly requesting approval for every small step.
+
+Do not overwrite an existing working implementation without understanding its purpose.
+
+### Implementation rules
+
+- Build incrementally in small, verifiable steps.
+- Implement and test the shared prediction API before integrating the clients.
+- Keep functions focused, reusable, and generalizable.
+- Avoid duplicate feature extraction, validation, authentication, or risk-classification logic.
+- Separate routes, business logic, schemas, data access, security, and configuration.
+- Use descriptive names, explicit interfaces, and type hints in Python.
+- Add comments for non-obvious logic, not comments that merely repeat code.
+- Centralize configuration and thresholds. Do not scatter magic numbers.
+- Keep files small enough to understand, but do not create unnecessary files or abstractions.
+- Add dependencies only when they solve a real problem.
+- Never claim a command, test, build, or deployment succeeded unless it was actually executed and verified.
+- Do not hide exceptions with broad catch-all handlers or silently return fake successful responses.
+- Do not leave mandatory features as TODOs, pseudocode, or nonfunctional UI controls.
+- If a feature cannot be completed by the deadline, report the limitation and provide a minimal, honest fallback rather than pretending it works.
+
+## 5. Shared prediction and integration contract
+
+Establish this contract before implementing the clients.
+
+Base URL: configurable through environment variables. Default local backend: http://127.0.0.1:8000.
+
+### POST /api/v1/predict
+
+Request:
+
+{
+  "url": "https://example.com"
+}
+
+Successful response:
+
+{
+  "request_id": "unique-request-id",
+  "url": "https://example.com",
+  "prediction": "benign",
+  "risk_level": "safe",
+  "phishing_probability": 0.12,
+  "model_version": "version-string",
+  "warnings": [],
+  "explanation": "Short, evidence-based explanation"
+}
+
+Contract rules:
+- prediction is "phishing" or "benign".
+- risk_level is "safe", "suspicious", or "dangerous".
+- phishing_probability is a number between 0 and 1.
+- model_version identifies the actual loaded model.
+- warnings lists relevant feature gaps, reputation results, or limitations.
+- explanation must not invent evidence or imply that the website was inspected when only the URL was analyzed.
+- Define behavior for malformed URLs, unsupported schemes, missing features, model-unavailable errors, and timeouts.
+- Return consistent JSON error responses with appropriate HTTP status codes.
+
+The numerical thresholds must be configurable and selected using validation data. Do not copy the research paper's 40% and 80% thresholds blindly.
+
+### Additional shared API routes
+
+Implement only as needed for the selected scope, but maintain consistent versioning:
+
+- GET /api/v1/health
+- GET /api/v1/model-info
+- GET /api/v1/stats
+- POST /api/v1/auth/register
+- POST /api/v1/auth/login
+- POST /api/v1/auth/logout
+- GET /api/v1/history
+- GET /api/v1/allowlist
+- POST /api/v1/allowlist
+- DELETE /api/v1/allowlist/{id}
+- GET /api/v1/blocklist
+- POST /api/v1/blocklist
+- DELETE /api/v1/blocklist/{id}
+- GET /api/v1/forum/posts
+- POST /api/v1/forum/posts
+- GET /api/v1/forum/posts/{id}/replies
+- POST /api/v1/forum/posts/{id}/replies
+
+Define the final request and response schemas before client integration. Add pagination and ownership checks where appropriate.
+
+### Risk policy
+
+- A trusted allowlist entry may suppress a warning, but it must never silently change the underlying ML prediction.
+- A blocklist entry should produce a high-risk warning and must be distinguished from model-generated evidence.
+- Unknown or suspicious URLs should not be declared safe merely because a lookup failed.
+- A safe model prediction is not a guarantee that a site is harmless.
+- The extension's primary behavior is warning before navigation, not silently blocking all links.
+
+## 6. ML correctness requirements
+
+- Inspect candidate datasets and document their sources, licenses, labels, features, and suitability.
+- Use accessible datasets that can realistically be downloaded and processed by the deadline.
+- Prefer a reproducible pipeline with a smaller defensible dataset over an untested pipeline that requires enormous downloads.
+- Check duplicates, missing values, class balance, malformed URLs, label consistency, and possible data leakage.
+- Separate training, validation, and testing data properly.
+- Where feasible, perform an independent-dataset evaluation. Do not call a random split cross-dataset validation.
+- Report precision, recall, F1, accuracy, confusion matrix, ROC-AUC when meaningful, and false-positive behavior.
+- Save the trained model, feature schema, threshold configuration, model metadata, and evaluation results.
+- Make the inference pipeline use exactly the same feature order and definitions as training.
+- Do not invent model performance or guarantee detection of previously unseen phishing attacks.
+
+## 7. Extension requirements
+
+- Implement a real Chrome Manifest V3 extension.
+- Detect eligible HTTP and HTTPS link clicks on ordinary web pages.
+- Send the candidate URL to the backend and display a warning for suspicious or dangerous results.
+- Make warning states, loading, timeout, and backend-unavailable behavior explicit.
+- Provide a clear user choice to return to safety or continue to the requested site.
+- Avoid collecting page contents, credentials, cookies, or unrelated browsing data.
+- Do not request broad permissions unless necessary and justified.
+- Do not claim to protect every navigation, browser-internal page, or link type.
+- Handle special schemes, malformed links, redirects, and URL encoding safely.
+- Clearly document what the extension does and does not protect against.
+
+## 8. Web application requirements
+
+Provide:
+- URL checker with input validation and an evidence-based result.
+- Statistics dashboard driven by actual database records.
+- User authentication and administrator roles.
+- Scan history with ownership checks.
+- User-managed allowlist and blocklist.
+- Forum with posts and replies.
+- Educational content on phishing indicators and prevention.
+- Responsive and coherent user interface.
+- Useful loading, empty, success, validation, and error states.
+
+Use real API integration. Seed data may be used for clearly labeled demo content, but it must not be mixed with real detection metrics.
+
+## 9. Security requirements
+
+- Validate and normalize URLs without changing the URL in ways that alter the target unexpectedly.
+- Prevent the backend from fetching arbitrary URLs unless a separately secured feature explicitly requires it.
+- If network-based enrichment is implemented, defend against SSRF, DNS rebinding, unsafe redirects, and private or reserved IP ranges.
+- Do not execute submitted URLs or visit suspicious sites during ordinary feature extraction.
+- Keep secrets out of source control.
+- Use password hashing and appropriate session protection.
+- Validate forum inputs and apply output escaping.
+- Protect privileged routes and user-owned data.
+- Configure CORS narrowly.
+- Avoid logging sensitive query parameters unnecessarily.
+- Treat model predictions as risk estimates, not security guarantees.
+
+## 10. Anti-AI-slop engineering rules
+
+Do not:
+- Generate a giant monolithic implementation without a plan.
+- Produce disconnected modules that cannot run together.
+- Create beautiful UI elements that have no real behavior.
+- Populate dashboards with hardcoded statistics presented as real.
+- Implement fake authentication or fake model inference.
+- Add needless design patterns, layers, frameworks, or dependencies.
+- Repeat similar functions across the codebase.
+- Suppress errors to make the demo appear successful.
+- Claim features are complete without testing them.
+- Copy research results and present them as experimental results from this project.
+- Hide limitations or fabricate security assurances.
+
+Instead:
+- Prefer simple, explicit, testable implementations.
+- Keep a clear directory structure and traceable data flow.
+- Add tests for important logic and API contracts.
+- Maintain a concise README, environment example, and module-specific setup instructions.
+- Track actual progress and outstanding issues.
+
+## 11. Deadline-driven implementation order
+
+1. Repository inspection and architecture plan.
+2. Dataset preparation, training, model artifact, and evaluation.
+3. FastAPI prediction endpoint and health checks.
+4. Chrome extension prediction integration and warning flow.
+5. Web URL checker and real model integration.
+6. Authentication, scan history, allowlist/blocklist, dashboard, forum, and education.
+7. Integration testing, bug fixing, and README.
+8. Final end-to-end demonstration.
+
+Do not spend excessive time on animations, elaborate design systems, cloud deployment, or optional enrichment features before the mandatory ML model and extension work.
+
+## 12. Definition of done
+
+The project is complete only when:
+- The ML training script can be run using documented instructions.
+- A real model artifact is created and loaded by the backend.
+- A test URL produces a real prediction through the API.
+- The Chrome extension communicates with the backend and displays warnings.
+- The website's checker uses the same prediction API.
+- The requested website modules work against actual backend routes and persistence.
+- Basic security and regression tests pass.
+- A clean local setup and demo procedure are documented.
+- Known limitations and actual evaluation results are reported honestly.
+
+Begin by inspecting the workspace and producing the master implementation plan. Do not immediately generate or overwrite the entire codebase.

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhishGuard — Settings</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 32px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #f1f5f9;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 28px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+
+    input[type="url"], input[type="text"] {
+      width: 100%;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #e2e8f0;
+      padding: 10px 12px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus { border-color: #3b82f6; }
+
+    .hint {
+      font-size: 11px;
+      color: #475569;
+      margin-top: 4px;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .btn-save {
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-save:hover { background: #2563eb; }
+
+    .btn-reset {
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 10px 20px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-reset:hover { background: #1e293b; color: #e2e8f0; }
+
+    #feedback {
+      margin-top: 14px;
+      font-size: 13px;
+      min-height: 20px;
+    }
+
+    #feedback.success { color: #22c55e; }
+    #feedback.error   { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <h1>🛡️ PhishGuard Settings</h1>
+  <p class="subtitle">Configure your PhishGuard extension preferences.</p>
+
+  <div class="form-group">
+    <label for="backend-url">Backend API URL</label>
+    <input
+      type="text"
+      id="backend-url"
+      placeholder="http://127.0.0.1:8000"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <p class="hint">The URL where your PhishGuard backend is running. Default: http://127.0.0.1:8000</p>
+  </div>
+
+  <div class="button-row">
+    <button class="btn-save" id="btn-save">Save Settings</button>
+    <button class="btn-reset" id="btn-reset">Reset to Default</button>
+  </div>
+
+  <p id="feedback"></p>
+
+  <script src="settings.js"></script>
+</body>
+</html>

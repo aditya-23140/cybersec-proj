@@ -1,0 +1,11 @@
+5. Deadline strategy
+For tomorrow's submission, follow this order of priority:
+Priority	Deliverable				Completion criterion
+P0		XGBoost model				Trained artifact and verified prediction
+P0		FastAPI prediction endpoint		Returns predictions from the actual artifact
+P0		Chrome extension			Demonstrable warning before eligible link navigation
+P1		Web URL checker				Real end-to-end model integration
+P1		Database and authentication		Working local persistence and user isolation
+P1		Dashboard and history			Real scan data displayed
+P2		Forum, allowlist/blocklist, education	Functional minimal versions
+P2		UI polish and optional features		Only after the above work

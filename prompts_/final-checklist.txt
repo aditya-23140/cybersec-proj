@@ -1,0 +1,26 @@
+Machine learning
+[ ] Training script runs successfully
+[ ] Trained XGBoost artifact exists and loads
+[ ] Evaluation metrics are generated from actual test data
+[ ] Prediction endpoint returns a real model result
+
+Chrome extension
+[ ] Extension loads without manifest errors
+[ ] Popup calls the actual backend
+[ ] Risky-link warning appears before navigation
+[ ] Safe return and user override both work
+[ ] Backend failure is handled honestly
+
+Web application
+[ ] URL checker uses the shared model API
+[ ] Dashboard uses real data
+[ ] Authentication and scan history work
+[ ] Allowlist and blocklist persist correctly
+[ ] Forum posts and replies work
+[ ] Education section is accessible
+
+Final demonstration
+[ ] Backend and frontend start from documented commands
+[ ] Extension and website use the same backend
+[ ] No fake predictions or fabricated statistics
+[ ] Critical tests pass and known limitations are documented

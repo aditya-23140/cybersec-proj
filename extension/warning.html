@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhishGuard — Warning</title>
+  <link rel="stylesheet" href="warning.css" />
+</head>
+<body>
+  <div class="container" id="warning-container">
+    <div class="icon-area" id="icon-area">⚠️</div>
+    <h1 class="headline" id="headline">Suspicious Link Detected</h1>
+
+    <div class="risk-badge-wrap">
+      <span class="risk-badge" id="risk-badge">checking...</span>
+    </div>
+
+    <div class="url-box">
+      <p class="url-label">Destination URL:</p>
+      <p class="url-text" id="dest-url">—</p>
+    </div>
+
+    <div class="prob-row" id="prob-row">
+      <span class="prob-label">Phishing Probability:</span>
+      <span class="prob-value" id="prob-value">—</span>
+    </div>
+
+    <div class="explanation-box" id="explanation-box" style="display:none">
+      <p class="section-label">Model Explanation</p>
+      <p id="explanation-text"></p>
+    </div>
+
+    <ul class="warnings-list" id="warnings-list" style="display:none"></ul>
+
+    <div class="error-box" id="error-box" style="display:none">
+      <p id="error-text"></p>
+    </div>
+
+    <div class="disclaimer">
+      <strong>⚠️ Disclaimer:</strong> This is an automated assessment based on URL structure only.
+      It may be incorrect. Legitimate sites can occasionally be flagged (false positives),
+      and some malicious sites may not be detected (false negatives).
+      This tool does <em>not</em> guarantee safety.
+    </div>
+
+    <div class="actions">
+      <button class="btn-back" id="btn-back">← Go Back (Recommended)</button>
+      <button class="btn-continue" id="btn-continue">Continue Anyway (I understand the risk)</button>
+    </div>
+  </div>
+
+  <script src="warning.js"></script>
+</body>
+</html>
