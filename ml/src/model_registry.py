@@ -112,12 +112,8 @@ def save_feature_schema(
         "feature_names": feature_names,
         "feature_count": len(feature_names),
         "feature_types": {name: "float32" for name in feature_names},
-        "fallback_values": {**fallback_values, "qty_nameservers": median_nameservers},
-        "network_dependent_features": [
-            "qty_nameservers",
-            "is_spf_domain",
-            "time_domain_activation",
-        ],
+        "fallback_values": fallback_values,
+        "network_dependent_features": [],
         "median_nameservers": median_nameservers,
     }
     path = Path(artifacts_dir) / "feature_schema.json"
@@ -161,6 +157,29 @@ def load_threshold_config(artifacts_dir: str | Path) -> dict:
     path = Path(artifacts_dir) / "threshold_config.json"
     if not path.exists():
         raise FileNotFoundError(f"Threshold config not found: {path}")
+    return _load_json(path)
+
+
+def save_calibration(
+    artifacts_dir: str | Path, slope: float, intercept: float
+) -> Path:
+    """Persist Platt-scaling parameters for the URL-model score."""
+    path = Path(artifacts_dir) / "calibration.json"
+    _save_json(
+        path,
+        {
+            "method": "platt",
+            "slope": float(slope),
+            "intercept": float(intercept),
+        },
+    )
+    return path
+
+
+def load_calibration(artifacts_dir: str | Path) -> dict:
+    path = Path(artifacts_dir) / "calibration.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Calibration not found: {path}")
     return _load_json(path)
 
 

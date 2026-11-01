@@ -149,7 +149,7 @@ function renderResult(url, data) {
   const disc = document.createElement('p');
   disc.className = 'result-disclaimer';
   disc.textContent =
-    'This is a probabilistic estimate based on URL structure only — not a guarantee. ' +
+    'This combines URL and, when available, aggregate page-structure signals — not a guarantee. ' +
     'False positives and false negatives are possible.';
   card.appendChild(disc);
 

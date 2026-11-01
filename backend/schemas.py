@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 class PredictRequest(BaseModel):
     url: str = Field(..., min_length=1, description="URL to analyse")
+    page_signals: "PageSignals | None" = None
 
     @field_validator("url")
     @classmethod
@@ -25,16 +26,34 @@ class PredictRequest(BaseModel):
         return v.strip()
 
 
+class PageSignals(BaseModel):
+    """Privacy-preserving aggregate signals collected from a loaded page."""
+
+    title_length: int = Field(0, ge=0, le=1000)
+    has_password_field: bool = False
+    external_form_count: int = Field(0, ge=0, le=100)
+    iframe_count: int = Field(0, ge=0, le=100)
+    external_reference_count: int = Field(0, ge=0, le=10000)
+    suspicious_text_hits: int = Field(0, ge=0, le=100)
+    has_favicon: bool = False
+    page_is_https: bool = False
+
+
 class PredictResponse(BaseModel):
     request_id: str
     url: str
     prediction: str               # "benign" | "phishing"
     risk_level: str               # "safe" | "suspicious" | "dangerous"
     phishing_probability: float = Field(ge=0.0, le=1.0)
+    url_model_score: float | None = Field(None, ge=0.0, le=1.0)
+    calibrated_url_model_score: float | None = Field(None, ge=0.0, le=1.0)
     model_version: str
     warnings: list[str]
     explanation: str
     source: str
+    network_signals: dict[str, Any] = Field(default_factory=dict)
+    domain_identity: dict[str, Any] = Field(default_factory=dict)
+    evidence_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #

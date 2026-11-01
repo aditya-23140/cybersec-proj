@@ -14,7 +14,10 @@ REPORTS_DIR: str = os.getenv("ML_REPORTS_DIR", "reports")
 PHIUSIIL_URL: str = (
     "https://archive.ics.uci.edu/static/public/967/phiusiil+phishing+url+dataset.zip"
 )
+OPENPHISH_FEED_URL: str = "https://openphish.com/feed.txt"
+TRANCO_URL: str = "https://tranco-list.eu/top-1m.csv.zip"
 DOWNLOAD_TIMEOUT: int = int(os.getenv("ML_DOWNLOAD_TIMEOUT", "60"))
+MULTI_SOURCE_MAX_ROWS: int = int(os.getenv("ML_MULTI_SOURCE_MAX_ROWS", "50000"))
 
 # ── Reproducibility ────────────────────────────────────────────────────────
 RANDOM_SEED: int = 42
@@ -24,7 +27,7 @@ TEST_SIZE: float = 0.15
 VAL_SIZE: float = 0.15
 
 # ── Model ──────────────────────────────────────────────────────────────────
-MODEL_VERSION: str = "1.0.0"
+MODEL_VERSION: str = "1.1.0"
 
 # ── Hyperparameter grid ────────────────────────────────────────────────────
 # Small grid to finish within the deadline; extend if time permits.

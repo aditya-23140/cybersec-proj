@@ -55,7 +55,7 @@ export default function Home() {
         <h1>🛡️ PhishGuard</h1>
         <p className={styles.tagline}>XGBoost-powered URL phishing detection. Paste a URL to check its risk level.</p>
         <div className={styles.disclaimer}>
-          ⚠ Predictions are probabilistic and based on URL structure only.
+          ⚠ Predictions are probabilistic and use URL features. The browser extension can additionally provide aggregate page-structure signals.
           This tool may be incorrect. Do not rely on it as your only security measure.
         </div>
       </div>

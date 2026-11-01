@@ -193,20 +193,37 @@ Base URL: `http://127.0.0.1:8000`
 
 ## 7. Features and Paper Alignment
 
-### 8 Model Features (Misiek & Hyla, 2026)
+### 12 Model Features (Misiek & Hyla, 2026)
 
-| Feature | Computed from | Fallback |
+| Feature | Computed from |
 |---|---|---|
 | `length_url` | URL string | Always available |
 | `qty_dots_url` | URL string | Always available |
 | `qty_hyphens_path` | URL path | Always available |
 | `subdomain_count` | URL hostname | Always available |
 | `has_brand_keyword` | URL hostname | Always available |
-| `qty_nameservers` | DNS NS lookup | Training-set median |
-| `is_spf_domain` | DNS TXT lookup | 0.0 (conservative) |
-| `time_domain_activation` | WHOIS | -1.0 (unknown) |
+| `hostname_hyphen_count`, `hostname_digit_count` | URL hostname | Always available |
+| `brand_lookalike` | URL hostname | Always available |
+| `suspicious_path_keyword` | URL path/query | Always available |
+| `is_domain_ip`, `has_obfuscation`, `digit_ratio_url` | URL/dataset fields | Always available |
 
-DNS/WHOIS enrichment is **disabled by default** (`ENABLE_DNS_ENRICHMENT=false`) for reliability. Enable with the env variable for enriched predictions from the web app.
+The trained model contains no synthetic DNS/WHOIS fallback values. When
+`ENABLE_NETWORK_ENRICHMENT=true` (the default), the API also performs bounded
+DNS, WHOIS, TLS-certificate, and optional URLhaus checks at prediction time.
+These live signals are returned as `network_signals`; unavailable checks remain
+explicitly unavailable and are never treated as proof that a site is safe.
+
+The product uses a hybrid decision architecture. The URL model produces a
+calibrated `url_model_score` as supporting evidence, while the final assessment
+is produced by the evidence policy. Reputation hits, credential-harvesting page
+signals, invalid TLS, and brand lookalikes take precedence over model output.
+Verified official domains can reduce false positives only after successful live
+verification. API responses expose `domain_identity` and `evidence_summary`
+separately so the displayed final result is not confused with the URL score.
+
+Training uses registrable-domain grouped splits so URLs from one domain cannot
+appear in both training and evaluation. The persisted `calibration.json`
+contains Platt-scaling parameters for the URL-model score.
 
 ### Risk Thresholds
 
@@ -216,7 +233,7 @@ Thresholds are **selected from the validation set** using F1 maximization — no
 
 ## 8. Known Limitations
 
-- **URL-structure only:** The model analyses URL patterns, not page content. A malicious site on a legitimate-looking domain may evade detection.
+- **Coverage limits:** The model analyses URL patterns. The browser extension can add aggregate page-structure signals, while the API can optionally add live DNS, WHOIS, TLS, and reputation signals. None of these independently verifies website ownership or page safety.
 - **False positives:** Legitimate sites with brand keywords or unusual URL structures may be flagged.
 - **Cross-dataset degradation:** As shown in the research paper, performance on URLs from different sources/time periods is typically lower than in-distribution test performance.
 - **No real-time updates:** The model is static post-training. New phishing patterns require retraining.

@@ -66,6 +66,12 @@ def test_subdomain_count_with_subdomains():
     assert fv.features[idx] >= 2.0
 
 
+def test_www_is_not_counted_as_suspicious_subdomain():
+    fv = extract_features("https://www.example.com")
+    idx = FEATURE_NAMES.index("subdomain_count")
+    assert fv.features[idx] == 0.0
+
+
 def test_has_brand_keyword_positive():
     # "paypal" is a brand keyword
     fv = extract_features("http://paypal-secure-login.xyz/verify")
@@ -79,14 +85,11 @@ def test_has_brand_keyword_negative():
     assert fv.features[idx] == 0.0
 
 
-def test_network_features_fallback_when_dns_disabled():
-    """Without DNS, network features should use fallback values (not error)."""
+def test_url_features_do_not_require_network_fallbacks():
+    """The trained vector uses URL-observable features only."""
     fv = extract_features("https://example.com", enable_dns=False)
     assert len(fv.features) == len(FEATURE_NAMES)
-    # Missing features list should include the three network features
-    assert "qty_nameservers" in fv.missing_features
-    assert "is_spf_domain" in fv.missing_features
-    assert "time_domain_activation" in fv.missing_features
+    assert fv.missing_features == []
 
 
 def test_determinism():

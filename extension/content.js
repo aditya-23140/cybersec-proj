@@ -10,6 +10,75 @@
   const SKIP_SCHEMES = /^(mailto:|tel:|javascript:|data:|#)/i;
 
   document.addEventListener('click', handleLinkClick, true);
+  reportPageSignals();
+
+  function reportPageSignals() {
+    const pageUrl = window.location.href;
+    if (!/^https?:\/\//i.test(pageUrl)) return;
+
+    const pageHost = window.location.hostname;
+    const forms = Array.from(document.forms);
+    const externalFormCount = forms.filter((form) => {
+      try {
+        const action = new URL(form.action || pageUrl, pageUrl);
+        return action.hostname !== pageHost;
+      } catch (_) {
+        return false;
+      }
+    }).length;
+
+    chrome.runtime.sendMessage({
+      type: 'PAGE_SIGNALS',
+      url: pageUrl,
+      pageSignals: {
+        title_length: document.title.length,
+        has_password_field: Boolean(document.querySelector('input[type="password"]')),
+        external_form_count: externalFormCount,
+        iframe_count: document.querySelectorAll('iframe').length,
+        external_reference_count: Array.from(document.querySelectorAll('[src], [href]'))
+          .filter((element) => {
+            try {
+              const value = element.src || element.href;
+              return value && new URL(value, pageUrl).hostname !== pageHost;
+            } catch (_) {
+              return false;
+            }
+          }).length,
+        suspicious_text_hits: (document.body?.innerText || '')
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((word) => /verify|urgent|suspend|password|wallet|billing/.test(word)).length,
+        has_favicon: Boolean(document.querySelector('link[rel~="icon"]')),
+        page_is_https: window.location.protocol === 'https:',
+      },
+    }, (response) => {
+      if (chrome.runtime.lastError) return;
+      if (response?.risk === 'dangerous') {
+        showPageWarning(response.explanation);
+      }
+    });
+  }
+
+  function showPageWarning(explanation) {
+    if (document.getElementById('__phishguard_page_warning__')) return;
+    const overlay = document.createElement('div');
+    overlay.id = '__phishguard_page_warning__';
+    overlay.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:2147483647',
+      'background:rgba(127,29,29,0.96)', 'color:white', 'padding:48px',
+      'font:16px system-ui,sans-serif', 'text-align:center',
+    ].join(';');
+    const title = document.createElement('h1');
+    title.textContent = 'PhishGuard: High-risk page detected';
+    const message = document.createElement('p');
+    message.textContent = explanation || 'This page contains high-risk phishing signals.';
+    const dismiss = document.createElement('button');
+    dismiss.textContent = 'Continue anyway';
+    dismiss.style.cssText = 'padding:10px 18px;font-size:16px;cursor:pointer';
+    dismiss.addEventListener('click', () => overlay.remove());
+    overlay.append(title, message, dismiss);
+    document.documentElement.appendChild(overlay);
+  }
 
   function handleLinkClick(event) {
     const link = event.target.closest('a[href]');

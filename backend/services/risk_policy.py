@@ -81,6 +81,25 @@ def probability_to_risk_level(probability: float) -> str:
     return "dangerous"
 
 
+def _live_verification_status(url: str, network: dict) -> tuple[bool, list[str]]:
+    """Return whether live checks corroborate a safe result."""
+    reasons: list[str] = []
+    dns = network.get("dns", {})
+    http = network.get("http", {})
+    tls = network.get("tls", {})
+
+    if not dns.get("dns_resolves", False):
+        reasons.append("the hostname did not resolve in DNS")
+    if http.get("request_status") != "ok":
+        reasons.append("the page could not be fetched")
+    if urlparse(url).scheme.lower() == "https":
+        if not tls.get("certificate_checked", False):
+            reasons.append("the HTTPS certificate could not be verified")
+        elif not tls.get("certificate_valid", False):
+            reasons.append("the HTTPS certificate is invalid or mismatched")
+    return not reasons, reasons
+
+
 # --------------------------------------------------------------------------- #
 # Policy application
 # --------------------------------------------------------------------------- #
@@ -129,6 +148,40 @@ def apply_policy(
         }
 
     signals = raw_prediction.get("high_confidence_signals", {})
+    network = raw_prediction.get("network_signals", {})
+    live_verified, verification_reasons = _live_verification_status(url, network)
+
+    probability = float(raw_prediction.get("phishing_probability", 0.0))
+    reputation = network.get("reputation", {})
+    if reputation.get("reputation_hit"):
+        return {
+            "prediction": "phishing",
+            "risk_level": "dangerous",
+            "phishing_probability": 1.0,
+            "warnings": [
+                f"⚠ The configured {reputation.get('reputation_provider', 'reputation')} "
+                "provider has reported this URL."
+            ],
+            "source": "reputation",
+        }
+
+    page_signals = raw_prediction.get("page_signals", {})
+    if (
+        page_signals.get("has_password_field")
+        and page_signals.get("external_form_count", 0) > 0
+    ):
+        probability = max(float(raw_prediction.get("phishing_probability", 0.0)), 0.9)
+        return {
+            "prediction": "phishing",
+            "risk_level": "dangerous",
+            "phishing_probability": probability,
+            "warnings": [
+                "⚠ The page contains a password field that submits to an external "
+                "domain, a high-risk credential-harvesting pattern."
+            ],
+            "source": "page_content_signal",
+        }
+
     if signals.get("brand_lookalike"):
         return {
             "prediction": "phishing",
@@ -143,7 +196,62 @@ def apply_policy(
             "source": "high_confidence_domain_signal",
         }
 
-    if signals.get("known_official_domain"):
+    http_signals = network.get("http", {})
+    if (
+        http_signals.get("has_password_field")
+        and http_signals.get("external_form_count", 0) > 0
+    ):
+        return {
+            "prediction": "phishing",
+            "risk_level": "dangerous",
+            "phishing_probability": max(probability, 0.95),
+            "warnings": [
+                "⚠ The fetched page contains a password field submitting to an "
+                "external domain, a credential-harvesting pattern."
+            ],
+            "source": "fetched_page_signal",
+        }
+
+    if (
+        http_signals.get("cross_domain_redirect")
+        and http_signals.get("suspicious_text_hits", 0) > 0
+    ):
+        return {
+            "prediction": "phishing",
+            "risk_level": "dangerous",
+            "phishing_probability": max(probability, 0.9),
+            "warnings": [
+                "⚠ The URL redirected to another domain and the fetched page "
+                "contained suspicious account or urgency language."
+            ],
+            "source": "fetched_page_signal",
+        }
+
+    whois = network.get("whois", {})
+    tls = network.get("tls", {})
+    network_warnings: list[str] = []
+    if whois.get("domain_age_days") is not None and whois["domain_age_days"] < 14:
+        network_warnings.append(
+            "The domain was registered less than 14 days ago."
+        )
+    if (
+        urlparse(url).scheme.lower() == "https"
+        and tls.get("certificate_checked", False)
+        and not tls.get("certificate_valid", False)
+    ):
+        network_warnings.append(
+            "The HTTPS certificate is invalid or does not match the hostname."
+        )
+    if network_warnings and probability >= 0.2:
+        return {
+            "prediction": "phishing",
+            "risk_level": "dangerous" if probability >= 0.7 else "suspicious",
+            "phishing_probability": probability,
+            "warnings": network_warnings,
+            "source": "network_signal",
+        }
+
+    if signals.get("known_official_domain") and live_verified:
         return {
             "prediction": "benign",
             "risk_level": "safe",
@@ -157,10 +265,22 @@ def apply_policy(
             "source": "official_domain_registry",
         }
 
+    if network.get("enrichment_enabled") and not live_verified:
+        return {
+            "prediction": "benign",
+            "risk_level": "suspicious",
+            "phishing_probability": max(probability, 0.3),
+            "warnings": [
+                "⚠ The model score is low, but the website could not be fully "
+                "verified. " + "; ".join(verification_reasons) + "."
+            ],
+            "source": "verification_incomplete",
+        }
+
     # ------------------------------------------------------------------ #
     # 2. Resolve prediction and probability from model output
     # ------------------------------------------------------------------ #
-    probability: float = float(raw_prediction.get("phishing_probability", 0.0))
+    probability = float(raw_prediction.get("phishing_probability", 0.0))
     prediction: str = raw_prediction.get("prediction", "benign")
 
     # Normalise prediction label

@@ -1,25 +1,22 @@
 """
 feature_extractor.py — Shared feature module used by both training and inference.
 
-Implements the 8 features from Misiek & Hyla (2026):
+Implements URL-observable phishing features from the training dataset:
   1. length_url
   2. qty_dots_url
   3. qty_hyphens_path
   4. subdomain_count
   5. has_brand_keyword
-  6. qty_nameservers
-  7. is_spf_domain
-  8. time_domain_activation
-  9. hostname_hyphen_count
- 10. hostname_digit_count
- 11. brand_lookalike
- 12. suspicious_path_keyword
+  6. hostname_hyphen_count
+  7. hostname_digit_count
+  8. brand_lookalike
+  9. suspicious_path_keyword
+ 10. is_domain_ip
+ 11. has_obfuscation
+ 12. digit_ratio_url
 
-Network-dependent features (qty_nameservers, is_spf_domain, time_domain_activation)
-are only fetched when enable_dns=True. Otherwise, fallback constants are used.
-
-NEVER makes HTTP requests to the target URL — only DNS/WHOIS queries when
-enable_dns=True.
+The model does not substitute unavailable DNS/WHOIS values into its feature
+vector. Optional live enrichment is handled separately by the API.
 """
 
 from __future__ import annotations
@@ -88,13 +85,13 @@ FEATURE_NAMES: list[str] = [
     "qty_hyphens_path",
     "subdomain_count",
     "has_brand_keyword",
-    "qty_nameservers",
-    "is_spf_domain",
-    "time_domain_activation",
     "hostname_hyphen_count",
     "hostname_digit_count",
     "brand_lookalike",
     "suspicious_path_keyword",
+    "is_domain_ip",
+    "has_obfuscation",
+    "digit_ratio_url",
 ]
 
 # ── Fallback constants for network-required features ─────────────────────────
@@ -206,7 +203,10 @@ def _subdomain_count(host: str) -> int:
         if not ext.domain:
             return 0
         # subdomain labels = number of dot-separated parts in ext.subdomain
-        return len(ext.subdomain.split(".")) if ext.subdomain else 0
+        labels = [label for label in ext.subdomain.split(".") if label]
+        if labels and labels[0].lower() == "www":
+            labels = labels[1:]
+        return len(labels)
     except ImportError:
         # Fallback: very naive — dots in hostname minus 1 (for domain.tld)
         parts = host.rstrip(".").split(".")
@@ -357,46 +357,22 @@ def extract_features(url: str, enable_dns: bool = False) -> FeatureVector:
     has_brand = any(kw in host_lower for kw in BRAND_KEYWORDS)
     has_brand_keyword = 1.0 if has_brand else 0.0
 
-    # ── Features 6–8: network-dependent ──────────────────────────────────
-    if enable_dns:
-        # Determine the registrable domain for DNS queries
-        try:
-            import tldextract
-
-            ext = tldextract.extract(host)
-            query_domain = f"{ext.domain}.{ext.suffix}" if ext.suffix else host
-        except ImportError:
-            query_domain = host
-
-        qty_ns, ns_err = _count_nameservers(query_domain)
-        if ns_err:
-            missing.append("qty_nameservers")
-            feature_warnings.append(f"qty_nameservers fallback ({ns_err})")
-
-        is_spf, spf_err = _has_spf_record(query_domain)
-        if spf_err:
-            missing.append("is_spf_domain")
-            feature_warnings.append(f"is_spf_domain fallback ({spf_err})")
-
-        age_days, age_err = _domain_age_days(query_domain)
-        if age_err:
-            missing.append("time_domain_activation")
-            feature_warnings.append(f"time_domain_activation fallback ({age_err})")
-    else:
-        qty_ns = _FALLBACK_QTY_NAMESERVERS
-        is_spf = _FALLBACK_IS_SPF_DOMAIN
-        age_days = _FALLBACK_TIME_DOMAIN_ACTIVATION
-        missing.extend(["qty_nameservers", "is_spf_domain", "time_domain_activation"])
-        feature_warnings.append(
-            "Network features are using fallback values (enable_dns=False). "
-            "Pass enable_dns=True for live DNS/WHOIS enrichment."
-        )
-
     hostname_hyphen_count = float(host.count("-"))
     hostname_digit_count = float(sum(char.isdigit() for char in host))
     brand_lookalike = _is_brand_lookalike(host)
     path_tokens = set(re.findall(r"[a-z0-9]+", f"{decoded_path} {parsed.query}".lower()))
     suspicious_path_keyword = float(bool(path_tokens & _SUSPICIOUS_PATH_KEYWORDS))
+    is_domain_ip = float(bool(_IP_RE.match(host)))
+    has_obfuscation = float(
+        "%" in normalised_url or "@" in normalised_url or "\\" in normalised_url
+    )
+    digit_ratio_url = float(sum(char.isdigit() for char in normalised_url) / max(1, len(normalised_url)))
+
+    if enable_dns:
+        feature_warnings.append(
+            "DNS/WHOIS enrichment is not part of the trained feature vector; "
+            "use the API enrichment layer for live domain signals."
+        )
 
     features = [
         length_url,
@@ -404,13 +380,13 @@ def extract_features(url: str, enable_dns: bool = False) -> FeatureVector:
         qty_hyphens_path,
         subdomain_count,
         has_brand_keyword,
-        qty_ns,
-        is_spf,
-        age_days,
         hostname_hyphen_count,
         hostname_digit_count,
         brand_lookalike,
         suspicious_path_keyword,
+        is_domain_ip,
+        has_obfuscation,
+        digit_ratio_url,
     ]
 
     assert len(features) == len(FEATURE_NAMES), (

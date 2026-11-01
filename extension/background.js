@@ -9,7 +9,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleCheckUrl(message.url, sender, sendResponse);
     return true; // Keep channel open for async response
   }
+  if (message.type === 'PAGE_SIGNALS' && sender.tab?.id != null) {
+    handlePageSignals(message.url, message.pageSignals, sender.tab.id, sendResponse);
+    return true;
+  }
 });
+
+async function handlePageSignals(url, pageSignals, tabId, sendResponse) {
+  let backendUrl = DEFAULT_BACKEND_URL;
+  try {
+    const stored = await chrome.storage.sync.get({ backendUrl: DEFAULT_BACKEND_URL });
+    backendUrl = stored.backendUrl || DEFAULT_BACKEND_URL;
+    const res = await fetch(`${backendUrl}/api/v1/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, page_signals: pageSignals }),
+      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`Backend returned HTTP ${res.status}`);
+    const data = await res.json();
+    const badge = data.risk_level === 'dangerous' ? '!' :
+      data.risk_level === 'suspicious' ? '?' : '';
+    await chrome.action.setBadgeText({ tabId, text: badge });
+    await chrome.action.setBadgeBackgroundColor({
+      tabId,
+      color: data.risk_level === 'dangerous' ? '#dc2626' :
+        data.risk_level === 'suspicious' ? '#f97316' : '#16a34a',
+    });
+    await chrome.action.setTitle({
+      tabId,
+      title: `PhishGuard: ${data.risk_level} (${data.explanation || 'checked'})`,
+    });
+    sendResponse({ risk: data.risk_level, explanation: data.explanation || '' });
+  } catch (err) {
+    console.warn('[PhishGuard] Page analysis failed:', err.message);
+    sendResponse({ risk: 'unknown' });
+  }
+}
 
 async function handleCheckUrl(url, sender, sendResponse) {
   let backendUrl = DEFAULT_BACKEND_URL;

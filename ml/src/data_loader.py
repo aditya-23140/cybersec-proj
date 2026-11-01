@@ -127,15 +127,11 @@ def _inspect_columns(df: pd.DataFrame) -> dict[str, str]:
             mapping["label"] = lower_map[candidate]
             break
 
-    # Optional network feature columns (may be pre-computed in dataset)
+    # URL-level columns used by the shared training/inference feature set.
     for standard, candidates in {
-        "qty_nameservers": ("qty_nameservers", "nameserver_count", "ns_count"),
-        "is_spf_domain": ("is_spf_domain", "spf", "has_spf"),
-        "time_domain_activation": (
-            "time_domain_activation",
-            "domain_age",
-            "domain_age_days",
-        ),
+        "is_domain_ip": ("isdomainip", "is_domain_ip"),
+        "has_obfuscation": ("hasobfuscation", "has_obfuscation"),
+        "digit_ratio_url": ("degitratioinurl", "degitratiourl", "digit_ratio_url"),
     }.items():
         for c in candidates:
             if c in lower_map:
@@ -147,10 +143,8 @@ def _inspect_columns(df: pd.DataFrame) -> dict[str, str]:
 
 def load_phiusiil(csv_path: str | Path) -> pd.DataFrame:
     """
-    Load the PhiUSIIL CSV and return a normalised DataFrame with columns:
-      - ``url``   (str)
-      - ``label`` (int: 1=phishing, 0=legitimate)
-      - Optional: ``qty_nameservers``, ``is_spf_domain``, ``time_domain_activation``
+    Load the PhiUSIIL CSV and return a normalised DataFrame with URL-level
+    columns used by the training feature pipeline.
 
     Raises
     ------
@@ -182,8 +176,8 @@ def load_phiusiil(csv_path: str | Path) -> pd.DataFrame:
         "Int64"
     )
 
-    # Include optional pre-computed network features if present
-    for feat in ("qty_nameservers", "is_spf_domain", "time_domain_activation"):
+    # Include measured URL features if present.
+    for feat in ("is_domain_ip", "has_obfuscation", "digit_ratio_url"):
         if feat in col_map:
             out[feat] = pd.to_numeric(df[col_map[feat]], errors="coerce")
 
@@ -201,6 +195,116 @@ def load_phiusiil(csv_path: str | Path) -> pd.DataFrame:
         out["label"].value_counts().to_dict(),
     )
     return out.reset_index(drop=True)
+
+
+def load_urlhaus_feed(
+    url: str = "https://urlhaus.abuse.ch/downloads/csv_recent/",
+    timeout: int = 60,
+    max_rows: int = 50_000,
+) -> pd.DataFrame:
+    """Load recent malicious URLs published by URLhaus."""
+    response = requests.get(url, timeout=timeout)
+    response.raise_for_status()
+    content = response.content
+    if content[:2] == b"PK":
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            csv_name = next(name for name in archive.namelist() if name.endswith(".csv"))
+            content = archive.read(csv_name)
+    rows = pd.read_csv(
+        io.BytesIO(content),
+        comment="#",
+        header=None,
+        names=[
+            "id", "dateadded", "url", "urlhaus_link", "threat",
+            "tags", "url_status",
+        ],
+        usecols=[0, 1, 2, 3, 4, 5, 6],
+    )
+    result = pd.DataFrame({"url": rows["url"].dropna().astype(str), "label": 1})
+    result["source"] = "urlhaus"
+    return result.head(max_rows).reset_index(drop=True)
+
+
+def load_openphish_feed(
+    url: str = "https://openphish.com/feed.txt",
+    timeout: int = 60,
+    max_rows: int = 50_000,
+) -> pd.DataFrame:
+    """Load phishing URLs from the OpenPhish community feed."""
+    response = requests.get(url, timeout=timeout)
+    response.raise_for_status()
+    urls = [
+        line.strip()
+        for line in response.text.splitlines()
+        if line.strip() and not line.startswith("#")
+    ]
+    result = pd.DataFrame({"url": urls[:max_rows], "label": 1})
+    result["source"] = "openphish"
+    return result
+
+
+def load_tranco_domains(
+    url: str = "https://tranco-list.eu/top-1m.csv.zip",
+    timeout: int = 60,
+    max_rows: int = 50_000,
+) -> pd.DataFrame:
+    """Load popular domains as benign examples from the Tranco list."""
+    response = requests.get(url, timeout=timeout)
+    response.raise_for_status()
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        csv_name = next(name for name in archive.namelist() if name.endswith(".csv"))
+        with archive.open(csv_name) as csv_file:
+            rows = pd.read_csv(csv_file, header=None, names=["rank", "domain"])
+    result = pd.DataFrame(
+        {"url": "https://" + rows["domain"].dropna().astype(str), "label": 0}
+    )
+    result["source"] = "tranco"
+    return result.head(max_rows).reset_index(drop=True)
+
+
+def load_multi_source_dataset(
+    phiusiil_path: str | Path,
+    phiusiil_url: str,
+    openphish_url: str,
+    tranco_url: str,
+    data_dir: str | Path,
+    timeout: int = 60,
+    max_rows: int = 50_000,
+) -> tuple[pd.DataFrame, bool]:
+    """Combine independent public sources without silently substituting data."""
+    frames: list[pd.DataFrame] = []
+    synthetic = False
+    try:
+        phiusiil = load_phiusiil(phiusiil_path)
+        phiusiil["source"] = "phiusiil"
+        frames.append(phiusiil)
+    except Exception as exc:
+        logger.warning("PhiUSIIL unavailable: %s", exc)
+
+    for loader, source_name, source_url in (
+        (load_openphish_feed, "openphish", openphish_url),
+        (load_tranco_domains, "tranco", tranco_url),
+    ):
+        try:
+            frames.append(loader(source_url, timeout, max_rows))
+        except Exception as exc:
+            logger.warning("%s unavailable: %s", source_name, exc)
+
+    if not frames:
+        raise RuntimeError(
+            "No real datasets could be loaded. Use --synthetic explicitly "
+            "for offline development; production training must use real data."
+        )
+
+    combined = pd.concat(frames, ignore_index=True, sort=False)
+    combined["url"] = combined["url"].astype(str).str.strip()
+    combined = combined.drop_duplicates(subset=["url"], keep="first")
+    logger.info(
+        "Combined sources: rows=%d by_source=%s",
+        len(combined),
+        combined["source"].value_counts().to_dict(),
+    )
+    return combined.reset_index(drop=True), synthetic
 
 
 # ─────────────────────────────────────────────────────────────────────────────

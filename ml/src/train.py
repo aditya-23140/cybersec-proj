@@ -126,18 +126,23 @@ def train(
     import sys
 
     import config
-    from .data_loader import load_dataset, load_phiusiil
+    from .data_loader import (
+        load_dataset,
+        load_multi_source_dataset,
+        load_phiusiil,
+    )
     from .data_validation import deduplicate, validate_dataset
-    from .evaluate import evaluate_on_split, select_threshold_by_f1
-    from .feature_extractor import FEATURE_NAMES, set_network_fallbacks
+    from .evaluate import _compute_metrics, select_threshold_by_f1
+    from .feature_extractor import FEATURE_NAMES
     from .model_registry import (
+        save_calibration,
         save_eval_results,
         save_feature_schema,
         save_metadata,
         save_model,
         save_threshold_config,
     )
-    from .preprocessing import extract_feature_matrix, stratified_split
+    from .preprocessing import domain_grouped_split, extract_feature_matrix
 
     t_start = time.time()
     output_dir = Path(output_dir)
@@ -146,25 +151,30 @@ def train(
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     # ── 1. Load dataset ───────────────────────────────────────────────────
-    if data_path and Path(data_path).exists():
-        logger.info("Loading dataset from %s", data_path)
-        try:
-            df = load_phiusiil(data_path)
-            is_synthetic = False
-        except Exception as exc:
-            logger.error("Failed to load %s: %s. Trying download/fallback.", data_path, exc)
-            df, is_synthetic = load_dataset(
-                config.DATA_DIR,
-                config.PHIUSIIL_URL,
-                config.DOWNLOAD_TIMEOUT,
-                force_synthetic,
-            )
-    else:
+    if force_synthetic:
         df, is_synthetic = load_dataset(
-            config.DATA_DIR,
+            config.DATA_DIR, config.PHIUSIIL_URL, config.DOWNLOAD_TIMEOUT, True
+        )
+    else:
+        phiusiil_path = (
+            Path(data_path)
+            if data_path and Path(data_path).exists()
+            else Path(config.DATA_DIR) / "phiusiil.csv"
+        )
+        if not phiusiil_path.exists():
+            from .data_loader import download_phiusiil
+
+            phiusiil_path = download_phiusiil(
+                config.PHIUSIIL_URL, config.DATA_DIR, config.DOWNLOAD_TIMEOUT
+            )
+        df, is_synthetic = load_multi_source_dataset(
+            phiusiil_path,
             config.PHIUSIIL_URL,
+            config.OPENPHISH_FEED_URL,
+            config.TRANCO_URL,
+            config.DATA_DIR,
             config.DOWNLOAD_TIMEOUT,
-            force_synthetic,
+            config.MULTI_SOURCE_MAX_ROWS,
         )
 
     if is_synthetic:
@@ -181,17 +191,13 @@ def train(
 
     # ── 3. Extract features ───────────────────────────────────────────────
     logger.info("Extracting features for %d URLs …", len(df))
-    X, y, _ = extract_feature_matrix(df, show_progress=True)
-
-    # Compute median nameservers from training data for fallback override
-    ns_idx = FEATURE_NAMES.index("qty_nameservers")
-    median_ns = float(np.median(X[:, ns_idx]))
-    set_network_fallbacks(median_nameservers=median_ns)
-    logger.info("Median qty_nameservers in dataset: %.2f", median_ns)
+    X, y, valid_idx = extract_feature_matrix(df, show_progress=True)
 
     # ── 4. Split ──────────────────────────────────────────────────────────
-    X_train, X_val, X_test, y_train, y_val, y_test = stratified_split(
-        X, y,
+    X_train, X_val, X_test, y_train, y_val, y_test = domain_grouped_split(
+        X,
+        y,
+        df.iloc[valid_idx]["url"].to_numpy(),
         test_size=config.TEST_SIZE,
         val_size=config.VAL_SIZE,
         random_state=seed,
@@ -217,6 +223,17 @@ def train(
 
     # ── 7. Threshold selection on val set ─────────────────────────────────
     y_val_prob = best_model.predict_proba(X_val)[:, 1]
+    from sklearn.linear_model import LogisticRegression
+    raw_val_logit = np.log(
+        np.clip(y_val_prob, 1e-6, 1 - 1e-6)
+        / np.clip(1 - y_val_prob, 1e-6, 1)
+    ).reshape(-1, 1)
+    calibrator = LogisticRegression(solver="lbfgs")
+    calibrator.fit(raw_val_logit, y_val)
+    y_val_prob = 1.0 / (1.0 + np.exp(-(
+        calibrator.coef_[0, 0] * raw_val_logit[:, 0]
+        + calibrator.intercept_[0]
+    )))
     opt_threshold, val_metrics = select_threshold_by_f1(y_val, y_val_prob)
     logger.info("Optimal threshold (max val F1): %.4f", opt_threshold)
 
@@ -225,21 +242,31 @@ def train(
     dangerous_thresh = round(min(0.95, opt_threshold + 0.15), 4)
 
     # ── 8. Evaluate on test set ───────────────────────────────────────────
-    test_metrics = evaluate_on_split(
-        best_model, X_test, y_test, threshold=opt_threshold, split_name="test"
+    raw_test_prob = best_model.predict_proba(X_test)[:, 1]
+    raw_test_logit = np.log(
+        np.clip(raw_test_prob, 1e-6, 1 - 1e-6)
+        / np.clip(1 - raw_test_prob, 1e-6, 1)
     )
+    test_prob = 1.0 / (1.0 + np.exp(-(
+        calibrator.coef_[0, 0] * raw_test_logit + calibrator.intercept_[0]
+    )))
+    test_metrics = _compute_metrics(
+        y_test,
+        (test_prob >= opt_threshold).astype(int),
+        test_prob,
+    )
+    test_metrics["split"] = "test"
+    test_metrics["threshold_used"] = opt_threshold
 
     t_elapsed = time.time() - t_start
 
     # ── 9. Save artifacts ─────────────────────────────────────────────────
     save_model(best_model, output_dir)
+    save_calibration(
+        output_dir, calibrator.coef_[0, 0], calibrator.intercept_[0]
+    )
 
-    fallback_values = {
-        "qty_nameservers": median_ns,
-        "is_spf_domain": 0.0,
-        "time_domain_activation": -1.0,
-    }
-    save_feature_schema(output_dir, FEATURE_NAMES, fallback_values, median_ns)
+    save_feature_schema(output_dir, FEATURE_NAMES, {}, 0.0)
 
     save_threshold_config(
         output_dir,
@@ -259,6 +286,12 @@ def train(
         "train_size": len(X_train),
         "val_size": len(X_val),
         "test_size": len(X_test),
+        "source_counts": df["source"].value_counts().to_dict()
+        if "source" in df.columns
+        else {},
+        "training_sources": sorted(df["source"].unique())
+        if "source" in df.columns
+        else [],
     }
     save_metadata(
         output_dir,

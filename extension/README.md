@@ -9,7 +9,8 @@ A Chrome Manifest V3 extension that intercepts link clicks and checks URLs again
 - Shows a warning page for suspicious or dangerous URLs
 - Manual URL checker in popup
 - Configurable backend URL in settings
-- Never reads page content, cookies, or credentials
+- Sends only aggregate page-structure signals after a page loads
+- Never reads cookies, credentials, form values, or page text off the device
 
 ## Installation
 
@@ -29,7 +30,7 @@ The extension requires the PhishGuard FastAPI backend to be running:
 
 ```bash
 cd backend
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 ## Files
@@ -47,12 +48,13 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 ## Privacy
 
 This extension:
-- ✅ Only reads `href` attributes on links you click
-- ✅ Sends only the URL string to your local backend
-- ❌ Never reads page text, cookies, passwords, or form data
+- ✅ Reads link `href` attributes to check clicked destinations
+- ✅ Sends aggregate counts (for example password fields, external forms, iframes,
+  and suspicious-word matches) to your configured backend
+- ❌ Never sends page text, cookies, passwords, or form values
 - ❌ Never sends data to any third-party service
 
 ## Warning Page Disclaimer
 
 The warning page includes a clear disclaimer that:
-> "This is an automated assessment based on URL structure only. It may be incorrect. Legitimate sites can occasionally be flagged."
+> "This is an automated assessment based on URL and available page-structure signals. It may be incorrect. Legitimate sites can occasionally be flagged."

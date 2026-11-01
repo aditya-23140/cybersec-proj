@@ -6,6 +6,14 @@ set JWT_SECRET_KEY explicitly.
 
 import os
 import secrets
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).with_name(".env"))
+except ImportError:
+    pass
 
 # --------------------------------------------------------------------------- #
 # ML / model
@@ -37,8 +45,17 @@ CORS_ORIGINS: list[str] = os.getenv(
 ENABLE_DNS_ENRICHMENT: bool = (
     os.getenv("ENABLE_DNS_ENRICHMENT", "false").lower() == "true"
 )
+ENABLE_NETWORK_ENRICHMENT: bool = (
+    os.getenv("ENABLE_NETWORK_ENRICHMENT", "true").lower() == "true"
+)
+ENRICHMENT_TIMEOUT_SECONDS: float = float(
+    os.getenv("ENRICHMENT_TIMEOUT_SECONDS", "5")
+)
+URLHAUS_ENABLED: bool = os.getenv("URLHAUS_ENABLED", "false").lower() == "true"
+URLHAUS_AUTH_KEY: str = os.getenv("URLHAUS_AUTH_KEY", "")
+URLHAUS_LOOKUP_URL: str = "https://urlhaus-api.abuse.ch/v1/url/"
 
 # --------------------------------------------------------------------------- #
 # Model metadata
 # --------------------------------------------------------------------------- #
-MODEL_VERSION: str = "1.0.0"
+MODEL_VERSION: str = "1.1.0"
