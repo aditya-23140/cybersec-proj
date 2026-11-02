@@ -8,6 +8,19 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt
+
+if not hasattr(bcrypt, "__about__"):
+    class _About:
+        __version__ = getattr(bcrypt, "__version__", "5.0.0")
+    bcrypt.__about__ = _About()
+_orig_hashpw = bcrypt.hashpw
+def _safe_hashpw(password, salt):
+    if isinstance(password, bytes) and len(password) > 72:
+        password = password[:72]
+    return _orig_hashpw(password, salt)
+bcrypt.hashpw = _safe_hashpw
+
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 

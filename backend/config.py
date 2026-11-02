@@ -54,6 +54,7 @@ ENRICHMENT_TIMEOUT_SECONDS: float = float(
 URLHAUS_ENABLED: bool = os.getenv("URLHAUS_ENABLED", "false").lower() == "true"
 URLHAUS_AUTH_KEY: str = os.getenv("URLHAUS_AUTH_KEY", "")
 URLHAUS_LOOKUP_URL: str = "https://urlhaus-api.abuse.ch/v1/url/"
+URLHAUS_HOST_LOOKUP_URL: str = "https://urlhaus-api.abuse.ch/v1/host/"
 
 # --------------------------------------------------------------------------- #
 # Model metadata

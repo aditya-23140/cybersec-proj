@@ -4,24 +4,31 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import socket
 import ssl
-import re
 from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from functools import lru_cache
-from time import monotonic
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+
+import tldextract
 
 import config
 
 logger = logging.getLogger(__name__)
+
 _MAX_HTML_BYTES = 256 * 1024
 _SUSPICIOUS_TEXT = re.compile(
     r"\b(verify\s+your\s+account|suspend(?:ed)?\s+account|urgent\s+action|"
     r"confirm\s+your\s+identity|crypto(?:currency)?\s+wallet)\b",
     re.IGNORECASE,
+)
+
+_offline_extract = tldextract.TLDExtract(
+    suffix_list_urls=(),
+    fallback_to_snapshot=True,
 )
 
 
@@ -35,22 +42,40 @@ def _host(url: str) -> str:
 def _registrable_domain(host: str) -> str:
     """Return the domain handled by the registry, excluding subdomains."""
     try:
-        import tldextract
-
-        extracted = tldextract.extract(host)
+        extracted = _offline_extract(host)
         if extracted.domain and extracted.suffix:
             return f"{extracted.domain}.{extracted.suffix}"
-    except ImportError:
+    except Exception:
         pass
     return host
 
 
 def _dns_signals(host: str) -> dict:
-    result = {"dns_resolves": False, "has_mx": False, "nameserver_count": None}
+    result = {
+        "dns_resolves": False,
+        "has_mx": False,
+        "nameserver_count": None,
+        "lookup_status": "unavailable",
+    }
     try:
         socket.getaddrinfo(host, None)
         result["dns_resolves"] = True
-    except socket.gaierror:
+        result["lookup_status"] = "resolved"
+    except socket.gaierror as exc:
+        # Distinguish NXDOMAIN vs temporary resolver failure
+        err_str = str(exc).lower()
+        if exc.errno in (-2, -5, 8) or "name or service not known" in err_str or "nodename" in err_str:
+            result["lookup_status"] = "nxdomain"
+        elif exc.errno in (-3, -4) or "temporary failure" in err_str:
+            result["lookup_status"] = "temporary_failure"
+        else:
+            result["lookup_status"] = "error"
+        return result
+    except (TimeoutError, socket.timeout):
+        result["lookup_status"] = "timeout"
+        return result
+    except Exception:
+        result["lookup_status"] = "error"
         return result
 
     try:
@@ -59,14 +84,9 @@ def _dns_signals(host: str) -> dict:
         resolver = dns.resolver.Resolver()
         resolver.timeout = config.ENRICHMENT_TIMEOUT_SECONDS
         resolver.lifetime = config.ENRICHMENT_TIMEOUT_SECONDS
-        try:
-            import tldextract
-
-            extracted = tldextract.extract(host)
-            nameserver_host = _registrable_domain(host)
-        except ImportError:
-            nameserver_host = host
+        nameserver_host = _registrable_domain(host)
         timeout = config.ENRICHMENT_TIMEOUT_SECONDS
+
         with ThreadPoolExecutor(max_workers=2) as executor:
             mx_future = executor.submit(resolver.resolve, host, "MX")
             ns_future = executor.submit(resolver.resolve, nameserver_host, "NS")
@@ -79,7 +99,7 @@ def _dns_signals(host: str) -> dict:
             except Exception:
                 result["nameserver_count"] = None
     except Exception as exc:
-        logger.debug("DNS enrichment incomplete for %s: %s", host, exc)
+        logger.debug("DNS MX/NS enrichment incomplete for %s: %s", host, exc)
     return result
 
 
@@ -149,6 +169,11 @@ def _tls_signals(host: str, port: int = 443) -> dict:
                         0, (expiry - datetime.now(timezone.utc)).days
                     )
                 result["lookup_status"] = "ok"
+    except ssl.SSLCertVerificationError:
+        result["certificate_checked"] = True
+        result["certificate_valid"] = False
+        result["lookup_status"] = "invalid_certificate"
+        logger.debug("TLS certificate verification failed for %s", host)
     except TimeoutError:
         result["lookup_status"] = "timeout"
         logger.debug("TLS enrichment timed out for %s", host)
@@ -171,9 +196,13 @@ def _urlhaus_reputation(url: str) -> dict:
             "reputation_hit": False,
             "lookup_status": "missing_api_key",
         }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    headers["Auth-Key"] = config.URLHAUS_AUTH_KEY
+    url_hit = False
+    host_hit = False
+    url_status = "error"
+    host_status = "error"
     try:
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        headers["Auth-Key"] = config.URLHAUS_AUTH_KEY
         request = Request(
             config.URLHAUS_LOOKUP_URL,
             data=f"url={url}".encode(),
@@ -182,19 +211,50 @@ def _urlhaus_reputation(url: str) -> dict:
         )
         with urlopen(request, timeout=config.ENRICHMENT_TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        return {
-            "reputation_provider": "URLhaus",
-            "reputation_hit": payload.get("query_status") == "ok",
-            "lookup_status": "ok",
-        }
+        url_hit = payload.get("query_status") == "ok"
+        url_status = "ok"
     except Exception as exc:
-        status = getattr(exc, "code", None)
+        url_status = "unauthorized" if getattr(exc, "code", None) == 401 else "error"
         logger.debug("URL reputation lookup unavailable for %s: %s", url, exc)
+
+    try:
+        host = _host(url)
+        host_request = Request(
+            config.URLHAUS_HOST_LOOKUP_URL,
+            data=json.dumps({"host": host}).encode(),
+            headers={
+                "Auth-Key": config.URLHAUS_AUTH_KEY,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urlopen(
+            host_request, timeout=config.ENRICHMENT_TIMEOUT_SECONDS
+        ) as response:
+            host_payload = json.loads(response.read().decode("utf-8"))
+        host_hit = host_payload.get("query_status") == "ok" and bool(
+            host_payload.get("urls")
+        )
+        host_status = "ok"
+    except Exception as exc:
+        host_status = "unauthorized" if getattr(exc, "code", None) == 401 else "error"
+        logger.debug("Host reputation lookup unavailable for %s: %s", url, exc)
+
+    if url_status == "ok" or host_status == "ok":
         return {
             "reputation_provider": "URLhaus",
-            "reputation_hit": False,
-            "lookup_status": "unauthorized" if status == 401 else "error",
+            "reputation_hit": url_hit or host_hit,
+            "url_match": url_hit,
+            "host_match": host_hit,
+            "lookup_status": "ok" if url_status == host_status == "ok" else "partial",
         }
+    return {
+        "reputation_provider": "URLhaus",
+        "reputation_hit": False,
+        "lookup_status": "unauthorized"
+        if "unauthorized" in {url_status, host_status}
+        else "error",
+    }
 
 
 def _http_signals(url: str) -> dict:

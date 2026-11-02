@@ -20,6 +20,13 @@ export default function ScanResult({ result }) {
         <span className={styles.urlLabel}>URL:</span> {result.url}
       </p>
       <p className={styles.explanation}>{result.explanation}</p>
+      {result.verification_status && result.verification_status !== 'verified' && (
+        <p className={styles.meta}>
+          Verification: {result.verification_status === 'partial'
+            ? 'domain and connection verified; page content unavailable'
+            : result.verification_status}
+        </p>
+      )}
       {result.calibrated_url_model_score != null && (
         <p className={styles.meta}>
           URL pattern risk: {(result.calibrated_url_model_score * 100).toFixed(1)}%

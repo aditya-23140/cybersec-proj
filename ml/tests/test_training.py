@@ -101,3 +101,32 @@ def test_xgboost_small_training_cycle():
         preds = loaded.predict_proba(X[:5])
         assert preds.shape == (5, 2)
         assert all(0.0 <= p <= 1.0 for p in preds[:, 1])
+
+
+def test_phiusiil_label_encoding_is_normalized():
+    """The public PhiUSIIL CSV uses 1 for legitimate and 0 for phishing."""
+    import pandas as pd
+    from src.data_loader import load_phiusiil
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "phiusiil.csv"
+        pd.DataFrame(
+            {
+                "URL": ["https://example.com", "http://login-paypal.example.net"],
+                "label": [1, 0],
+                "URLLength": [12, 30],
+                "DomainLength": [11, 20],
+                "Bank": [0, 1],
+            }
+        ).to_csv(path, index=False)
+
+        df = load_phiusiil(path)
+        assert df["label"].tolist() == [0, 1]
+
+
+def test_generic_security_words_do_not_count_as_brand_keywords():
+    from src.feature_extractor import FEATURE_NAMES, extract_features
+
+    fv = extract_features("https://secure-bank.example.com")
+    idx = FEATURE_NAMES.index("has_brand_keyword")
+    assert fv.features[idx] == 0.0

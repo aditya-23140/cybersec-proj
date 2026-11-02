@@ -51,6 +51,7 @@ class PredictResponse(BaseModel):
     warnings: list[str]
     explanation: str
     source: str
+    verification_status: str = "unknown"
     network_signals: dict[str, Any] = Field(default_factory=dict)
     domain_identity: dict[str, Any] = Field(default_factory=dict)
     evidence_summary: dict[str, Any] = Field(default_factory=dict)

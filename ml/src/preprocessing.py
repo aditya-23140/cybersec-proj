@@ -2,23 +2,20 @@
 preprocessing.py — Feature engineering and dataset splitting.
 
 Applies ``feature_extractor.extract_features()`` to every URL in the dataset,
-then produces stratified train / val / test splits with no URL overlap.
-
-The trained vector uses URL-observable features and measured URL columns from
-PhiUSIIL when available. It does not substitute unavailable DNS/WHOIS values.
+then produces stratified or domain-disjoint train / val / test splits with no URL overlap.
 """
 
 from __future__ import annotations
 
 import logging
 from typing import Optional
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit, train_test_split
-from urllib.parse import urlparse
 
-from .feature_extractor import FEATURE_NAMES, extract_features
+from .feature_extractor import FEATURE_NAMES, extract_features, get_tld_extract
 
 logger = logging.getLogger(__name__)
 
@@ -28,43 +25,17 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _extract_row_features(
-    url: str,
-    precomputed: dict[str, Optional[float]],
-) -> list[float]:
+def _extract_row_features(url: str) -> list[float]:
     """
-    Extract features for a single URL.
-
-    URL-computable features are always recomputed from the URL string for
-    train/inference consistency. PhiUSIIL URL features override equivalent
-    computed values when present.
-
-    Parameters
-    ----------
-    url:
-        The raw URL string.
-    precomputed:
-        Dict mapping feature name → pre-computed value (or None if absent).
+    Extract features for a single URL using the shared feature extractor.
+    Guarantees 100% parity between training and inference.
     """
     try:
         fv = extract_features(url, enable_dns=False)
+        return fv.features
     except ValueError as exc:
         logger.debug("Skipping invalid URL %r: %s", url, exc)
         return []
-
-    features = fv.features.copy()
-
-    dataset_idxs = {
-        "is_domain_ip": FEATURE_NAMES.index("is_domain_ip"),
-        "has_obfuscation": FEATURE_NAMES.index("has_obfuscation"),
-        "digit_ratio_url": FEATURE_NAMES.index("digit_ratio_url"),
-    }
-    for feat, idx in dataset_idxs.items():
-        val = precomputed.get(feat)
-        if val is not None and not np.isnan(float(val)):
-            features[idx] = float(val)
-
-    return features
 
 
 def extract_feature_matrix(
@@ -77,10 +48,9 @@ def extract_feature_matrix(
     Parameters
     ----------
     df:
-        DataFrame with columns ``url``, ``label``, and optionally
-        ``qty_nameservers``, ``is_spf_domain``, ``time_domain_activation``.
+        DataFrame with columns ``url`` and ``label``.
     show_progress:
-        Log progress every 10 000 rows.
+        Log progress every 25 000 rows.
 
     Returns
     -------
@@ -90,28 +60,16 @@ def extract_feature_matrix(
         ``valid_idx`` — original DataFrame indices of rows that were processed
                         successfully (for traceability).
     """
-    # Determine which pre-computed columns are available
-    available_dataset_cols = [
-        c for c in ("is_domain_ip", "has_obfuscation", "digit_ratio_url")
-        if c in df.columns
-    ]
-    logger.info("Using measured URL features from dataset columns: %s", available_dataset_cols)
-
     X_rows: list[list[float]] = []
     y_rows: list[int] = []
     valid_indices: list[int] = []
 
     total = len(df)
     for i, (idx, row) in enumerate(df.iterrows()):
-        if show_progress and i % 10_000 == 0:
+        if show_progress and i > 0 and i % 25_000 == 0:
             logger.info("Feature extraction: %d / %d rows", i, total)
 
-        precomputed: dict[str, Optional[float]] = {}
-        for col in available_dataset_cols:
-            raw = row.get(col)
-            precomputed[col] = float(raw) if raw is not None and not pd.isna(raw) else None
-
-        features = _extract_row_features(str(row["url"]), precomputed)
+        features = _extract_row_features(str(row["url"]))
         if not features:
             continue  # skip invalid URLs
 
@@ -149,28 +107,11 @@ def stratified_split(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Produce stratified train / val / test splits.
-
-    Parameters
-    ----------
-    X, y:
-        Feature matrix and labels.
-    test_size:
-        Fraction for the test set.
-    val_size:
-        Fraction for the validation set (of the *original* dataset).
-    random_state:
-        Random seed.
-
-    Returns
-    -------
-    X_train, X_val, X_test, y_train, y_val, y_test
     """
-    # Step 1: Split off test set
     X_temp, X_test, y_temp, y_test = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=random_state
     )
 
-    # Step 2: Split val from remaining
     val_fraction_of_temp = val_size / (1.0 - test_size)
     X_train, X_val, y_train, y_val = train_test_split(
         X_temp,
@@ -201,14 +142,19 @@ def domain_grouped_split(
     test_size: float = 0.15,
     val_size: float = 0.15,
     random_state: int = 42,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[
+    np.ndarray, np.ndarray, np.ndarray,
+    np.ndarray, np.ndarray, np.ndarray,
+    np.ndarray, np.ndarray, np.ndarray,
+]:
     """Split by registrable domain to prevent domain leakage across splits."""
-    import tldextract
+    ext_func = get_tld_extract()
+    urls_arr = np.asarray(urls)
 
     groups = []
-    for raw_url in urls:
+    for raw_url in urls_arr:
         host = (urlparse(str(raw_url)).hostname or "").lower().rstrip(".")
-        extracted = tldextract.extract(host)
+        extracted = ext_func(host)
         groups.append(
             f"{extracted.domain}.{extracted.suffix}"
             if extracted.domain and extracted.suffix
@@ -231,6 +177,7 @@ def domain_grouped_split(
     )
     train_idx = train_val_idx[train_rel]
     val_idx = train_val_idx[val_rel]
+
     logger.info(
         "Domain-grouped split sizes — train: %d, val: %d, test: %d; unique domains: %d",
         len(train_idx),
@@ -238,4 +185,8 @@ def domain_grouped_split(
         len(test_idx),
         len(set(groups_array)),
     )
-    return X[train_idx], X[val_idx], X[test_idx], y[train_idx], y[val_idx], y[test_idx]
+    return (
+        X[train_idx], X[val_idx], X[test_idx],
+        y[train_idx], y[val_idx], y[test_idx],
+        urls_arr[train_idx], urls_arr[val_idx], urls_arr[test_idx],
+    )

@@ -1,36 +1,62 @@
 """
 feature_extractor.py — Shared feature module used by both training and inference.
 
-Implements URL-observable phishing features from the training dataset:
-  1. length_url
-  2. qty_dots_url
-  3. qty_hyphens_path
-  4. subdomain_count
-  5. has_brand_keyword
-  6. hostname_hyphen_count
-  7. hostname_digit_count
-  8. brand_lookalike
-  9. suspicious_path_keyword
- 10. is_domain_ip
- 11. has_obfuscation
- 12. digit_ratio_url
+Implements URL-observable phishing features:
+   1. length_url
+   2. length_hostname
+   3. length_path
+   4. qty_dots_url
+   5. qty_hyphens_url
+   6. qty_hyphens_path
+   7. subdomain_count
+   8. has_brand_keyword
+   9. hostname_hyphen_count
+  10. hostname_digit_count
+  11. brand_lookalike
+  12. brand_impersonation
+  13. suspicious_path_keyword
+  14. is_domain_ip
+  15. has_obfuscation
+  16. has_userinfo
+  17. digit_ratio_url
+  18. is_https
+  19. has_punycode
+  20. query_length
+  21. qty_params
 
-The model does not substitute unavailable DNS/WHOIS values into its feature
-vector. Optional live enrichment is handled separately by the API.
+The model uses only URL-observable features that can be extracted identically
+and deterministically at both training and inference time. Optional live
+network enrichment (DNS, TLS, WHOIS, reputation) is handled by the API service.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-import warnings
 from dataclasses import dataclass, field
 from typing import Optional
-from urllib.parse import urlparse, unquote
+from urllib.parse import unquote, urlparse, urlunparse
+
+import tldextract
 
 logger = logging.getLogger(__name__)
 
+# Offline TLDExtract singleton — avoids live network requests to publicsuffix.org
+_offline_extract = tldextract.TLDExtract(
+    suffix_list_urls=(),
+    fallback_to_snapshot=True,
+)
+
+
+def get_tld_extract():
+    """Return the shared offline TLDExtract instance."""
+    return _offline_extract
+
+
 # ── Brand keyword list ────────────────────────────────────────────────────────
+# Use only high-profile targeted brands; generic authentication/security terms
+# like "login", "secure", "verify", "account", and "bank" belong in path/query
+# features to prevent false positives on benign domains (e.g. southbankmosaics.com).
 BRAND_KEYWORDS: frozenset[str] = frozenset(
     {
         "paypal",
@@ -43,15 +69,6 @@ BRAND_KEYWORDS: frozenset[str] = frozenset(
         "twitter",
         "netflix",
         "ebay",
-        "bank",
-        "secure",
-        "account",
-        "login",
-        "signin",
-        "verify",
-        "update",
-        "confirm",
-        "wallet",
         "chase",
         "wellsfargo",
         "citibank",
@@ -71,40 +88,119 @@ BRAND_KEYWORDS: frozenset[str] = frozenset(
         "binance",
         "blockchain",
         "crypto",
-        "nft",
         "steam",
         "playstation",
         "xbox",
+        "bankofamerica",
+        "ledger",
+        "trezor",
+        "metamask",
+        "github",
+        "gitlab",
+        "bitbucket",
+        "stackoverflow",
+        "reddit",
     }
 )
 
-# ── Feature order (critical — model was trained on this exact order) ──────────
+KNOWN_OFFICIAL_DOMAINS: frozenset[str] = frozenset(
+    {
+        "amazon.com",
+        "apple.com",
+        "facebook.com",
+        "google.com",
+        "instagram.com",
+        "linkedin.com",
+        "microsoft.com",
+        "netflix.com",
+        "paypal.com",
+        "spotify.com",
+        "twitter.com",
+        "discord.com",
+        "wikipedia.org",
+        "youtube.com",
+        "ledger.com",
+        "coinbase.com",
+        "binance.com",
+        "chase.com",
+        "wellsfargo.com",
+        "citi.com",
+        "citibank.com",
+        "adobe.com",
+        "dropbox.com",
+        "yahoo.com",
+        "whatsapp.com",
+        "telegram.org",
+        "steampowered.com",
+        "playstation.com",
+        "xbox.com",
+        "github.com",
+        "gitlab.com",
+        "bitbucket.org",
+        "stackoverflow.com",
+        "reddit.com",
+    }
+)
+
+_KNOWN_BRAND_LABELS: frozenset[str] = frozenset(
+    d.split(".", 1)[0] for d in KNOWN_OFFICIAL_DOMAINS
+)
+
+# ── Feature order (critical — model is trained on this exact order) ───────────
 FEATURE_NAMES: list[str] = [
     "length_url",
+    "length_hostname",
+    "length_path",
     "qty_dots_url",
+    "qty_hyphens_url",
     "qty_hyphens_path",
     "subdomain_count",
     "has_brand_keyword",
     "hostname_hyphen_count",
     "hostname_digit_count",
     "brand_lookalike",
+    "brand_impersonation",
     "suspicious_path_keyword",
     "is_domain_ip",
     "has_obfuscation",
+    "has_userinfo",
     "digit_ratio_url",
+    "is_https",
+    "has_punycode",
+    "query_length",
+    "qty_params",
 ]
 
-# ── Fallback constants for network-required features ─────────────────────────
-# These are overridden by training-set medians stored in feature_schema.json;
-# the module-level defaults are used before the schema is available.
-_FALLBACK_QTY_NAMESERVERS: float = 0.0  # replaced by median at training time
-_FALLBACK_IS_SPF_DOMAIN: float = 0.0  # conservative: missing SPF ≈ suspicious
-_FALLBACK_TIME_DOMAIN_ACTIVATION: float = -1.0  # sentinel for "unknown"
+# Schemes that cannot be analysed as standard URLs
+_UNSUPPORTED_SCHEMES = {"javascript", "data", "file", "blob", "about", "vbscript"}
 
-# Schemes that cannot be analysed as URLs
-_UNSUPPORTED_SCHEMES = {"javascript", "data", "file", "blob", "about"}
 _SUSPICIOUS_PATH_KEYWORDS = frozenset(
-    {"account", "billing", "confirm", "login", "password", "signin", "update", "verify"}
+    {
+        "account",
+        "billing",
+        "confirm",
+        "login",
+        "password",
+        "signin",
+        "sign-in",
+        "log-in",
+        "update",
+        "verify",
+        "verification",
+        "banking",
+        "wallet",
+        "security",
+        "authenticate",
+        "recovery",
+        "credential",
+        "suspend",
+        "unlock",
+    }
+)
+
+_IP_RE = re.compile(
+    r"^(?:\d{1,3}\.){3}\d{1,3}$"  # IPv4
+    r"|^\[.*\]$"  # IPv6 bracket notation
 )
 
 
@@ -119,18 +215,13 @@ class FeatureVector:
 
     features: list[float]  # Length == len(FEATURE_NAMES)
     feature_names: list[str]  # Always FEATURE_NAMES
-    missing_features: list[str]  # Names of features using fallback values
-    warnings: list[str]  # Human-readable notes for the caller
+    missing_features: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # URL parsing helpers
 # ─────────────────────────────────────────────────────────────────────────────
-
-_IP_RE = re.compile(
-    r"^(?:\d{1,3}\.){3}\d{1,3}$"  # IPv4
-    r"|^\[.*\]$"  # IPv6 bracket notation
-)
 
 
 def _parse_url(url: str) -> tuple[str, "urlparse"]:
@@ -147,7 +238,7 @@ def _parse_url(url: str) -> tuple[str, "urlparse"]:
     if not url:
         raise ValueError("Empty URL")
 
-    # Detect unsupported schemes before adding a default one
+    # Detect unsupported schemes before adding default scheme
     lower = url.lower()
     for scheme in _UNSUPPORTED_SCHEMES:
         if lower.startswith(scheme + ":"):
@@ -181,36 +272,21 @@ def _hostname(parsed: "urlparse") -> str:
         host = host.encode("idna").decode("ascii")
     except (UnicodeError, UnicodeDecodeError, UnicodeEncodeError):
         pass
-    return host.lower()
+    return host.lower().rstrip(".")
 
 
 def _subdomain_count(host: str) -> int:
-    """
-    Count subdomain labels (everything left of the registrable domain).
-
-    Uses a simple heuristic: number of dots in the hostname minus the number
-    of dots in the effective TLD (1 for .com, 2 for .co.uk, etc.).
-
-    For IP addresses, returns 0.
-    """
+    """Count subdomain labels before the registrable domain."""
     if _IP_RE.match(host):
         return 0
 
-    try:
-        import tldextract  # lazy import — only needed at feature-extraction time
-
-        ext = tldextract.extract(host)
-        if not ext.domain:
-            return 0
-        # subdomain labels = number of dot-separated parts in ext.subdomain
-        labels = [label for label in ext.subdomain.split(".") if label]
-        if labels and labels[0].lower() == "www":
-            labels = labels[1:]
-        return len(labels)
-    except ImportError:
-        # Fallback: very naive — dots in hostname minus 1 (for domain.tld)
-        parts = host.rstrip(".").split(".")
-        return max(0, len(parts) - 2)
+    ext = _offline_extract(host)
+    if not ext.domain:
+        return 0
+    labels = [label for label in ext.subdomain.split(".") if label]
+    if labels and labels[0].lower() == "www":
+        labels = labels[1:]
+    return len(labels)
 
 
 def _edit_distance(left: str, right: str) -> int:
@@ -230,78 +306,16 @@ def _edit_distance(left: str, right: str) -> int:
     return previous[-1]
 
 
-def _is_brand_lookalike(host: str) -> float:
+def _is_brand_lookalike(domain_label: str) -> float:
     """Detect one-edit brand lookalikes in the registrable domain label."""
-    try:
-        import tldextract
-
-        domain = tldextract.extract(host).domain
-    except ImportError:
-        domain = host.rsplit(".", 1)[0].split(".")[-1]
-
-    if not domain or domain in BRAND_KEYWORDS:
+    if not domain_label or domain_label in BRAND_KEYWORDS:
         return 0.0
     return float(
         any(
-            len(brand) >= 5 and _edit_distance(domain, brand) == 1
+            len(brand) >= 4 and _edit_distance(domain_label, brand) == 1
             for brand in BRAND_KEYWORDS
         )
     )
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DNS / WHOIS helpers (only called when enable_dns=True)
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def _count_nameservers(domain: str) -> tuple[float, Optional[str]]:
-    """Return (count, error_message_or_None)."""
-    try:
-        import dns.resolver  # dnspython
-
-        answers = dns.resolver.resolve(domain, "NS", lifetime=5)
-        return float(len(answers)), None
-    except Exception as exc:
-        return _FALLBACK_QTY_NAMESERVERS, str(exc)
-
-
-def _has_spf_record(domain: str) -> tuple[float, Optional[str]]:
-    """Return (1.0 if SPF found else 0.0, error_or_None)."""
-    try:
-        import dns.resolver
-
-        answers = dns.resolver.resolve(domain, "TXT", lifetime=5)
-        for rdata in answers:
-            txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
-            if txt.startswith("v=spf1"):
-                return 1.0, None
-        return 0.0, None
-    except Exception as exc:
-        return _FALLBACK_IS_SPF_DOMAIN, str(exc)
-
-
-def _domain_age_days(domain: str) -> tuple[float, Optional[str]]:
-    """Return (age_in_days, error_or_None). -1.0 if unknown."""
-    try:
-        import whois  # python-whois
-        from datetime import datetime, timezone
-
-        info = whois.whois(domain)
-        creation = info.creation_date
-        if creation is None:
-            return _FALLBACK_TIME_DOMAIN_ACTIVATION, "No creation date in WHOIS"
-        # creation_date can be a list
-        if isinstance(creation, list):
-            creation = creation[0]
-        if isinstance(creation, datetime):
-            now = datetime.now(timezone.utc)
-            if creation.tzinfo is None:
-                creation = creation.replace(tzinfo=timezone.utc)
-            age = (now - creation).days
-            return float(age), None
-        return _FALLBACK_TIME_DOMAIN_ACTIVATION, "Unexpected creation_date type"
-    except Exception as exc:
-        return _FALLBACK_TIME_DOMAIN_ACTIVATION, str(exc)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -311,21 +325,19 @@ def _domain_age_days(domain: str) -> tuple[float, Optional[str]]:
 
 def extract_features(url: str, enable_dns: bool = False) -> FeatureVector:
     """
-    Extract the 8 phishing-detection features from *url*.
+    Extract phishing-detection features from *url*.
 
     Parameters
     ----------
     url:
         Raw URL string (with or without scheme).
     enable_dns:
-        If ``True``, perform DNS NS/TXT lookups and a WHOIS query to populate
-        network-dependent features. If ``False`` (default), those features
-        use their fallback values immediately without any network call.
+        If True, log warning that DNS enrichment is performed by backend API.
 
     Returns
     -------
     FeatureVector
-        ``features`` is guaranteed to be length 8 in ``FEATURE_NAMES`` order.
+        ``features`` is guaranteed to be length len(FEATURE_NAMES) in exact order.
 
     Raises
     ------
@@ -335,58 +347,101 @@ def extract_features(url: str, enable_dns: bool = False) -> FeatureVector:
     normalised_url, parsed = _parse_url(url)
     host = _hostname(parsed)
     path = parsed.path or ""
+    query = parsed.query or ""
 
-    missing: list[str] = []
+    # Canonical host and URL strips generic 'www.' prefix for feature consistency
+    canonical_host = host[4:] if (host.startswith("www.") and len(host) > 4) else host
+    if parsed.netloc.lower().startswith("www."):
+        canonical_netloc = parsed.netloc[4:]
+        canonical_url = urlunparse(parsed._replace(netloc=canonical_netloc))
+    else:
+        canonical_url = normalised_url
+
+    ext = _offline_extract(canonical_host)
+    domain_label = ext.domain.lower() if ext.domain else ""
+    registrable_domain = (
+        f"{ext.domain}.{ext.suffix}".lower()
+        if ext.domain and ext.suffix
+        else canonical_host
+    )
+
     feature_warnings: list[str] = []
 
-    # ── Feature 1: length_url ─────────────────────────────────────────────
-    length_url = float(len(normalised_url))
-
-    # ── Feature 2: qty_dots_url ───────────────────────────────────────────
-    qty_dots_url = float(normalised_url.count("."))
-
-    # ── Feature 3: qty_hyphens_path ───────────────────────────────────────
+    # 1. Component lengths
+    length_url = float(len(canonical_url))
+    length_hostname = float(len(canonical_host))
     decoded_path = unquote(path)
+    length_path = float(len(decoded_path))
+
+    # 2. Character counts
+    qty_dots_url = float(canonical_url.count("."))
+    qty_hyphens_url = float(canonical_url.count("-"))
     qty_hyphens_path = float(decoded_path.count("-"))
 
-    # ── Feature 4: subdomain_count ────────────────────────────────────────
-    subdomain_count = float(_subdomain_count(host))
+    # 3. Hostname & Subdomain characteristics
+    subdomain_count = float(_subdomain_count(canonical_host))
+    hostname_hyphen_count = float(canonical_host.count("-"))
+    hostname_digit_count = float(sum(char.isdigit() for char in canonical_host))
 
-    # ── Feature 5: has_brand_keyword ──────────────────────────────────────
-    host_lower = host.lower()
-    has_brand = any(kw in host_lower for kw in BRAND_KEYWORDS)
-    has_brand_keyword = 1.0 if has_brand else 0.0
+    # 4. Token-based brand keyword & impersonation
+    host_tokens = set(re.findall(r"[a-z0-9]+", canonical_host))
+    matched_brands = host_tokens & BRAND_KEYWORDS
+    has_brand_keyword = 1.0 if matched_brands else 0.0
 
-    hostname_hyphen_count = float(host.count("-"))
-    hostname_digit_count = float(sum(char.isdigit() for char in host))
-    brand_lookalike = _is_brand_lookalike(host)
-    path_tokens = set(re.findall(r"[a-z0-9]+", f"{decoded_path} {parsed.query}".lower()))
-    suspicious_path_keyword = float(bool(path_tokens & _SUSPICIOUS_PATH_KEYWORDS))
-    is_domain_ip = float(bool(_IP_RE.match(host)))
-    has_obfuscation = float(
-        "%" in normalised_url or "@" in normalised_url or "\\" in normalised_url
+    # Brand impersonation: brand token present in hostname, but the domain is NOT the brand's official domain
+    is_official_brand = (
+        domain_label in BRAND_KEYWORDS
+        or registrable_domain in KNOWN_OFFICIAL_DOMAINS
     )
-    digit_ratio_url = float(sum(char.isdigit() for char in normalised_url) / max(1, len(normalised_url)))
+    brand_impersonation = 1.0 if (matched_brands and not is_official_brand) else 0.0
+
+    # 5. Lookalike domain
+    brand_lookalike = _is_brand_lookalike(domain_label)
+
+    # 6. Sensitive keywords in path or query
+    combined_path_query = f"{decoded_path} {unquote(query)}".lower()
+    path_tokens = set(re.findall(r"[a-z0-9]+", combined_path_query))
+    suspicious_path_keyword = 1.0 if bool(path_tokens & _SUSPICIOUS_PATH_KEYWORDS) else 0.0
+
+    # 7. Structural anomalies
+    is_domain_ip = 1.0 if bool(_IP_RE.match(canonical_host)) else 0.0
+    has_obfuscation = 1.0 if ("%" in canonical_url or "\\" in canonical_url or "@" in canonical_url) else 0.0
+    has_userinfo = 1.0 if (parsed.username is not None or "@" in (parsed.netloc.split(":")[0])) else 0.0
+    digit_ratio_url = float(sum(char.isdigit() for char in canonical_url) / max(1, len(canonical_url)))
+    is_https = 1.0 if parsed.scheme.lower() == "https" else 0.0
+    has_punycode = 1.0 if ("xn--" in canonical_host) else 0.0
+
+    # 8. Query parameters
+    query_length = float(len(query))
+    qty_params = float(len([p for p in query.split("&") if p])) if query else 0.0
 
     if enable_dns:
         feature_warnings.append(
-            "DNS/WHOIS enrichment is not part of the trained feature vector; "
-            "use the API enrichment layer for live domain signals."
+            "DNS/WHOIS enrichment is handled by the API enrichment layer for live domain signals."
         )
 
     features = [
         length_url,
+        length_hostname,
+        length_path,
         qty_dots_url,
+        qty_hyphens_url,
         qty_hyphens_path,
         subdomain_count,
         has_brand_keyword,
         hostname_hyphen_count,
         hostname_digit_count,
         brand_lookalike,
+        brand_impersonation,
         suspicious_path_keyword,
         is_domain_ip,
         has_obfuscation,
+        has_userinfo,
         digit_ratio_url,
+        is_https,
+        has_punycode,
+        query_length,
+        qty_params,
     ]
 
     assert len(features) == len(FEATURE_NAMES), (
@@ -396,16 +451,6 @@ def extract_features(url: str, enable_dns: bool = False) -> FeatureVector:
     return FeatureVector(
         features=features,
         feature_names=list(FEATURE_NAMES),
-        missing_features=missing,
+        missing_features=[],
         warnings=feature_warnings,
     )
-
-
-def set_network_fallbacks(median_nameservers: float) -> None:
-    """
-    Update the module-level fallback for ``qty_nameservers`` to the training-
-    set median. Called by the training pipeline after computing the median so
-    that inference uses a data-informed default.
-    """
-    global _FALLBACK_QTY_NAMESERVERS
-    _FALLBACK_QTY_NAMESERVERS = median_nameservers

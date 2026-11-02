@@ -121,9 +121,9 @@ def _build_explanation(raw: dict, source: str) -> str:
         )
     elif source == "high_confidence_domain_signal":
         explanation = (
-            "This hostname contains a one-character lookalike of a known brand. "
-            "The high-confidence domain signal overrides the model's lower score "
-            "because lookalike domains are a known phishing technique. "
+            "This hostname appears to impersonate a known brand on an unrelated "
+            "domain. The high-confidence domain signal overrides the model's "
+            "lower score because brand impersonation is a known phishing technique. "
             "This does not verify the website's content or ownership."
         )
     elif source == "official_domain_registry":
@@ -288,6 +288,7 @@ def predict(
     probability: float = policy["phishing_probability"]
     warnings: list[str] = policy["warnings"]
     source: str = policy["source"]
+    verification_status: str = policy.get("verification_status", "unknown")
 
     explanation = _build_explanation(raw, source)
 
@@ -324,6 +325,7 @@ def predict(
         warnings=warnings,
         explanation=explanation,
         source=source,
+        verification_status=verification_status,
         network_signals=raw.get("network_signals", {}),
         domain_identity={
             "known_official_domain": raw.get("high_confidence_signals", {}).get(
@@ -331,6 +333,9 @@ def predict(
             ),
             "brand_lookalike": raw.get("high_confidence_signals", {}).get(
                 "brand_lookalike", False
+            ),
+            "brand_impersonation": raw.get("high_confidence_signals", {}).get(
+                "brand_impersonation", False
             ),
         },
         evidence_summary={

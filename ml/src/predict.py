@@ -18,26 +18,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-logger = logging.getLogger(__name__)
-
-_KNOWN_OFFICIAL_DOMAINS = frozenset(
-    {
-        "amazon.com",
-        "apple.com",
-        "facebook.com",
-        "google.com",
-        "instagram.com",
-        "linkedin.com",
-        "microsoft.com",
-        "netflix.com",
-        "paypal.com",
-        "spotify.com",
-        "twitter.com",
-        "discord.com",
-        "wikipedia.org",
-        "youtube.com",
-    }
+from .feature_extractor import (
+    FEATURE_NAMES,
+    KNOWN_OFFICIAL_DOMAINS,
+    _KNOWN_BRAND_LABELS,
+    extract_features,
+    get_tld_extract,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -65,16 +54,15 @@ class PredictionResult:
 class PhishingPredictor:
     """
     Load the trained XGBoost model and feature schema, then produce
-    PredictionResult objects for arbitrary URLs.
+    prediction dictionaries for arbitrary URLs.
 
     Parameters
     ----------
     artifacts_dir:
         Directory containing model.ubj, feature_schema.json,
-        threshold_config.json, and metadata.json.
+        threshold_config.json, metadata.json, and calibration.json.
     enable_dns:
-        If True, perform live DNS / WHOIS enrichment for network features.
-        Defaults to False for fast, safe inference.
+        If True, request live network enrichment (handled by backend).
     """
 
     def __init__(self, artifacts_dir: str, enable_dns: bool = False) -> None:
@@ -127,6 +115,7 @@ class PhishingPredictor:
             self._metadata = load_metadata(self._artifacts_dir)
         except FileNotFoundError:
             logger.warning("metadata.json not found.")
+
         try:
             from .model_registry import load_calibration
             self._calibration = load_calibration(self._artifacts_dir)
@@ -141,8 +130,8 @@ class PhishingPredictor:
     def _suspicious_threshold(self) -> float:
         return float(
             self._threshold_config.get(
-                "optimal_f1_threshold",
-                self._threshold_config.get("suspicious_threshold", 0.3),
+                "suspicious_threshold",
+                self._threshold_config.get("optimal_f1_threshold", 0.35) * 0.7,
             )
         )
 
@@ -179,12 +168,7 @@ class PhishingPredictor:
     # ------------------------------------------------------------------ #
 
     def _extract(self, url: str):
-        """
-        Extract features from *url*.
-
-        Returns FeatureVector. Raises ValueError for invalid URLs.
-        """
-        from .feature_extractor import extract_features
+        """Extract features from *url*."""
         return extract_features(url, enable_dns=self._enable_dns)
 
     # ------------------------------------------------------------------ #
@@ -200,17 +184,26 @@ class PhishingPredictor:
     ) -> str:
         feature_labels = {
             "length_url": "URL length",
+            "length_hostname": "hostname length",
+            "length_path": "path length",
             "qty_dots_url": "number of dots",
+            "qty_hyphens_url": "total hyphens",
             "qty_hyphens_path": "path hyphens",
             "subdomain_count": "subdomain count",
-            "has_brand_keyword": "brand/security keyword",
+            "has_brand_keyword": "brand keyword",
             "hostname_hyphen_count": "hostname hyphen count",
             "hostname_digit_count": "hostname digit count",
-            "brand_lookalike": "brand lookalike signal",
+            "brand_lookalike": "brand lookalike domain",
+            "brand_impersonation": "brand impersonation",
             "suspicious_path_keyword": "suspicious path keyword",
             "is_domain_ip": "IP-address hostname",
             "has_obfuscation": "URL obfuscation",
+            "has_userinfo": "embedded userinfo syntax",
             "digit_ratio_url": "URL digit ratio",
+            "is_https": "HTTPS protocol",
+            "has_punycode": "punycode IDN hostname",
+            "query_length": "query length",
+            "qty_params": "query parameter count",
         }
         positive = [
             feature_labels.get(name, name)
@@ -232,14 +225,7 @@ class PhishingPredictor:
         if details:
             assessment += " Model contribution analysis shows that " + "; ".join(details) + "."
         else:
-            assessment += " No individual URL feature made a strong contribution to the score."
-
-        if feature_vector.missing_features:
-            assessment += (
-                " Network-dependent features were unavailable: "
-                + ", ".join(feature_vector.missing_features)
-                + "."
-            )
+            assessment += " No individual URL feature made an outsized contribution to the score."
 
         return (
             assessment
@@ -254,13 +240,6 @@ class PhishingPredictor:
     def predict(self, url: str) -> dict:
         """
         Analyse *url* and return a dict compatible with PredictResponse.
-
-        Raises
-        ------
-        ValueError
-            For unsupported URL schemes or unparseable URLs.
-        RuntimeError
-            If the model is not loaded (should not happen post-__init__).
         """
         import numpy as np
 
@@ -272,25 +251,33 @@ class PhishingPredictor:
         # Extract features
         fv = self._extract(url)  # raises ValueError for bad URLs
         hostname = (urlparse(url).hostname or "").lower().rstrip(".")
-        try:
-            import tldextract
 
-            extracted = tldextract.extract(hostname)
-            registrable_domain = (
-                f"{extracted.domain}.{extracted.suffix}"
-                if extracted.domain and extracted.suffix
-                else hostname
-            )
-        except ImportError:
-            registrable_domain = hostname
+        ext = get_tld_extract()(hostname)
+        registrable_domain = (
+            f"{ext.domain}.{ext.suffix}".lower()
+            if ext.domain and ext.suffix
+            else hostname
+        )
         feature_index = {
             name: index for index, name in enumerate(fv.feature_names)
         }
+        is_lookalike = bool(fv.features[feature_index["brand_lookalike"]])
+        is_impersonation = bool(fv.features[feature_index["brand_impersonation"]])
+        is_official = registrable_domain in KNOWN_OFFICIAL_DOMAINS
+
+        hostname_labels = set(hostname.split("."))
+        impersonated_brands = sorted(
+            brand
+            for brand in _KNOWN_BRAND_LABELS
+            if brand in hostname_labels
+            and not is_official
+        )
+
         high_confidence_signals = {
-            "brand_lookalike": bool(
-                fv.features[feature_index["brand_lookalike"]]
-            ),
-            "known_official_domain": registrable_domain in _KNOWN_OFFICIAL_DOMAINS,
+            "brand_lookalike": is_lookalike,
+            "brand_impersonation": is_impersonation,
+            "impersonated_brands": impersonated_brands,
+            "known_official_domain": is_official,
         }
 
         expected_features = getattr(self._model, "n_features_in_", None)
@@ -311,7 +298,6 @@ class PhishingPredictor:
         contributions: list[tuple[str, float]] = []
         try:
             from xgboost import DMatrix
-            from .feature_extractor import FEATURE_NAMES
 
             model_contributions = self._model.get_booster().predict(
                 DMatrix(X), pred_contribs=True
@@ -325,10 +311,8 @@ class PhishingPredictor:
             logger.warning("Could not calculate model contributions: %s", exc)
 
         explanation = self._build_explanation(fv, risk_level, prob, contributions)
-
         warnings: list[str] = list(fv.warnings)
-
-        model_version = self._metadata.get("model_version", "1.0.0")
+        model_version = self._metadata.get("model_version", "1.1.0")
 
         return {
             "request_id": request_id,

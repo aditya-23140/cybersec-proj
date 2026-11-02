@@ -223,6 +223,52 @@ def test_unverified_site_cannot_be_marked_safe():
     assert result["phishing_probability"] >= 0.3
 
 
+def test_official_domain_remains_safe_when_page_fetch_times_out():
+    result = apply_policy(
+        "https://www.discord.com",
+        {
+            "prediction": "benign",
+            "phishing_probability": 0.01,
+            "high_confidence_signals": {"known_official_domain": True},
+            "network_signals": {
+                "enrichment_enabled": True,
+                "dns": {"dns_resolves": True},
+                "tls": {
+                    "certificate_checked": True,
+                    "certificate_valid": True,
+                },
+                "http": {
+                    "request_status": "timeout",
+                    "cross_domain_redirect": False,
+                },
+                "reputation": {"reputation_hit": False},
+            },
+        },
+        [],
+        [],
+    )
+
+    assert result["risk_level"] == "safe"
+    assert result["source"] == "official_domain_registry"
+    assert result["verification_status"] == "partial"
+
+
+def test_brand_impersonation_overrides_safe_model():
+    result = apply_policy(
+        "https://ledger.unrelated-example.com",
+        {
+            "prediction": "benign",
+            "phishing_probability": 0.01,
+            "high_confidence_signals": {"brand_impersonation": True},
+            "network_signals": {"enrichment_enabled": True},
+        },
+        [],
+        [],
+    )
+    assert result["risk_level"] == "dangerous"
+    assert result["source"] == "high_confidence_domain_signal"
+
+
 def test_dns_mx_failure_does_not_skip_nameservers(monkeypatch):
     class Resolver:
         timeout = None

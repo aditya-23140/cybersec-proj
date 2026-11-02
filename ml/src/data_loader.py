@@ -28,8 +28,9 @@ logger = logging.getLogger(__name__)
 _URL_COL = "URL"
 _LABEL_COL = "label"
 
-# PhiUSIIL stores:  1 = phishing,  0 = legitimate
-# We standardise to the same convention internally.
+# The public PhiUSIIL dataset encodes 1 = legitimate and 0 = phishing.
+# We normalise it to the internal convention used by the project: 1 = phishing,
+# 0 = legitimate.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PhiUSIIL download
@@ -116,13 +117,31 @@ def _inspect_columns(df: pd.DataFrame) -> dict[str, str]:
     mapping: dict[str, str] = {}
 
     # URL column
-    for candidate in ("url", "urls", "url_string"):
+    for candidate in (
+        "url",
+        "urls",
+        "url_string",
+        "uri",
+        "website",
+        "site",
+        "page_url",
+        "target_url",
+    ):
         if candidate in lower_map:
             mapping["url"] = lower_map[candidate]
             break
 
-    # Label column
-    for candidate in ("label", "labels", "class", "phishing", "target"):
+    # Label column: accept both the canonical "label" name and common variants.
+    for candidate in (
+        "label",
+        "labels",
+        "class",
+        "target",
+        "result",
+        "target_label",
+        "is_phishing",
+        "phishing",
+    ):
         if candidate in lower_map:
             mapping["label"] = lower_map[candidate]
             break
@@ -139,6 +158,17 @@ def _inspect_columns(df: pd.DataFrame) -> dict[str, str]:
                 break
 
     return mapping
+
+
+def _is_real_phiusiil_schema(columns: list[str]) -> bool:
+    """Detect the public PhiUSIIL CSV, which has dataset-specific URL features."""
+    column_names = {str(c).lower() for c in columns}
+    return (
+        "url" in column_names
+        and "label" in column_names
+        and {"urllength", "domainlength", "tldlength", "bank", "pay", "crypto"}
+        & column_names
+    )
 
 
 def load_phiusiil(csv_path: str | Path) -> pd.DataFrame:
@@ -175,6 +205,11 @@ def load_phiusiil(csv_path: str | Path) -> pd.DataFrame:
     out["label"] = pd.to_numeric(df[col_map["label"]], errors="coerce").astype(
         "Int64"
     )
+
+    # The public PhiUSIIL CSV encodes 1 = legitimate and 0 = phishing, but the
+    # rest of this project uses the internal convention 1 = phishing and 0 = legitimate.
+    if _is_real_phiusiil_schema(df.columns):
+        out["label"] = out["label"].map({1: 0, 0: 1})
 
     # Include measured URL features if present.
     for feat in ("is_domain_ip", "has_obfuscation", "digit_ratio_url"):
