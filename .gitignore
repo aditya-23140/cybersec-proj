@@ -54,6 +54,8 @@ pnpm-debug.log*
 # Generated ML data, models, reports, and caches
 ml/data/*
 !ml/data/.gitkeep
+!ml/data/sanity_legitimate_nonpopular.csv
+!ml/data/real_legitimate_paths_train.csv
 ml/artifacts/*
 !ml/artifacts/.gitkeep
 ml/reports/*

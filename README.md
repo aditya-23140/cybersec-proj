@@ -16,6 +16,40 @@ frontend/    ← Next.js web application
 
 Both the **extension** and the **web app** call the **same** backend prediction endpoint (`POST /api/v1/predict`). No model logic lives in the clients.
 
+### Hybrid model diagnostics
+
+The backend loads `ml/artifacts/hybrid.joblib` by default. When `page_html` is
+provided (the extension sends a sanitized rendered DOM), inference runs in
+`url+content` mode. Otherwise the backend performs the bounded SSRF-safe fetch
+unless `HYBRID_FETCH_ENABLED=false`; a failed or disabled fetch remains visible
+as `fetch_error` in the response instead of being silently treated as a full
+scan. Exact registered popular domains are trusted only at the registered
+domain/`www` host and only when they are in the first 10,000 rows of the
+configured Tranco file; arbitrary hosting subdomains are still scored. The
+rank feature remains available for ranks through 1M and is not disabled by
+`--no-popular-trust`.
+
+Reproduce the current training/evaluation run with:
+
+```bash
+cd ml
+python data_pipeline.py internal-links \
+  --tranco data/tranco/top-1m.csv --start 10001 --end 900000 \
+  --domains 500 --limit 5000 --out data/real_legitimate_paths_train.csv
+python data_pipeline.py verify \
+  --csv data/real_legitimate_paths_train.csv \
+  --out data/real_legitimate_paths_train_verified.csv
+python phishing_hybrid.py train \
+  --data data/phiusiil.csv,URL,label,0 \
+  --data data/real_legitimate_paths_train_verified.csv,url,label,1 \
+  --data data/hybrid_snapshot_dataset/benign.csv,url,label,1 \
+  --data data/hybrid_snapshot_dataset/phishing.csv,url,label,1 \
+  --snapshots data/hybrid_snapshot_merged \
+  --top-domains data/tranco/top-1m.csv --top-n 1000000 \
+  --out artifacts/hybrid.joblib --n-iter 25 --workers 4
+pytest -q tests/test_legitimate_sanity.py
+```
+
 ---
 
 ## Prerequisites
@@ -34,7 +68,7 @@ cd ml
 # Install Python dependencies
 pip install xgboost scikit-learn pandas numpy requests tldextract pytest
 
-# Train (downloads PhiUSIIL dataset automatically; falls back to synthetic if unavailable)
+# Train the URL-only baseline
 python -m src.train --seed 42
 
 # Run ML tests

@@ -333,6 +333,13 @@ _PHISH_WORDS = {"phishing", "phish", "malicious", "malware", "bad", "defacement"
 _BENIGN_WORDS = {"benign", "legitimate", "legit", "good", "safe", "clean", "normal"}
 _URL_COLS = ["url", "URL", "Url", "link", "domain", "website", "address"]
 _LABEL_COLS = ["label", "Label", "class", "Class", "status", "Status", "result", "Result", "type", "target", "phishing"]
+_KNOWN_POPULAR_DOMAINS = {
+    "apple.com", "amazon.com", "bbc.com", "bankofamerica.com", "chase.com",
+    "cloudflare.com", "github.com", "google.com", "hsbc.co.uk", "instagram.com",
+    "linkedin.com", "microsoft.com", "mozilla.org", "nasa.gov", "nytimes.com",
+    "phishtank.com", "python.org", "reddit.com", "stackoverflow.com", "wikipedia.org",
+    "youtube.com",
+}
 
 
 def load_dataset(spec: str, source_id: int) -> pd.DataFrame:
@@ -362,6 +369,13 @@ def load_dataset(spec: str, source_id: int) -> pd.DataFrame:
         y = low.isin(_PHISH_WORDS).astype(int)
         df = df[known.values]
         raw = raw[known.values]
+    positive_domains = df.loc[y.loc[df.index].astype(bool), url_col].map(registered_domain)
+    popular_fraction = positive_domains.isin(_KNOWN_POPULAR_DOMAINS).mean()
+    if popular_fraction > 0.01:
+        raise SystemExit(
+            f"{path}: phishing class contains {popular_fraction:.2%} known-popular domains; "
+            "the phishing value is likely wrong or the source is not a phishing feed."
+        )
     out = pd.DataFrame({"url": df[url_col].astype(str), "y": y.loc[df.index].values, "source": source_id})
     return out
 
@@ -388,15 +402,19 @@ def augment(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
         host, path, query, core = normalise_url(url) if _ok(url) else (None,) * 4
         if host is None:
             continue
-        kind = rng.integers(0, 4)
+        kind = rng.integers(0, 6)
         if kind == 0:
             new = "https://" + core
         elif kind == 1:
             new = "http://www." + core if not host.startswith("www.") else "http://" + core
         elif kind == 2:
             new = host  # host-only copy: forces host-level learning for BOTH classes
-        else:
+        elif kind == 3:
             new = core.rstrip("/") + ("/" if rng.random() < 0.5 else "")
+        elif kind == 4:
+            new = host + "/about"
+        else:
+            new = host + "/login"
         rows.append((new, y, g, s))
     return pd.DataFrame(rows, columns=["url", "y", "group", "source"])
 

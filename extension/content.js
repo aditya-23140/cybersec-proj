@@ -17,6 +17,7 @@
     if (!/^https?:\/\//i.test(pageUrl)) return;
 
     const pageHost = window.location.hostname;
+    const privateHost = /^(localhost|.*\.local|.*\.internal|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|127\.\d+\.\d+\.\d+)$/.test(pageHost);
     const forms = Array.from(document.forms);
     const externalFormCount = forms.filter((form) => {
       try {
@@ -26,6 +27,19 @@
         return false;
       }
     }).length;
+
+    function sanitisedPageHtml() {
+      const clone = document.documentElement.cloneNode(true);
+      clone.querySelectorAll('input').forEach((input) => {
+        input.removeAttribute('value');
+        input.value = '';
+      });
+      clone.querySelectorAll('textarea').forEach((textarea) => {
+        textarea.textContent = '';
+        textarea.value = '';
+      });
+      return new XMLSerializer().serializeToString(clone).slice(0, 300000);
+    }
 
     const pageSignals = {
       title_length: document.title.length,
@@ -41,7 +55,7 @@
             return false;
           }
         }).length,
-      suspicious_text_hits: (document.body?.innerText || '')
+      suspicious_text_hits: (document.querySelector('main, article, h1, h2')?.innerText || '')
         .toLowerCase()
         .split(/\s+/)
         .filter((word) => /verify|urgent|suspend|password|wallet|billing/.test(word)).length,
@@ -50,29 +64,19 @@
       page_html: sanitisedPageHtml(),
     };
 
-    chrome.runtime.sendMessage({
+    chrome.storage.sync.get({ allowlist: [] }, (settings) => {
+      const allowlisted = settings.allowlist.some((domain) =>
+        pageHost === domain || pageHost.endsWith(`.${domain}`));
+      if (privateHost || allowlisted) return;
+      chrome.runtime.sendMessage({
       type: 'PAGE_SIGNALS',
       url: pageUrl,
       pageSignals: { ...pageSignals, page_html: undefined },
       pageHtml: pageSignals.page_html,
-    }, (response) => {
-      if (chrome.runtime.lastError) return;
-      if (response?.risk === 'dangerous') {
-        showPageWarning(response.explanation);
-      }
-
-      function sanitisedPageHtml() {
-        const clone = document.documentElement.cloneNode(true);
-        clone.querySelectorAll('input').forEach((input) => {
-          input.removeAttribute('value');
-          input.value = '';
-        });
-        clone.querySelectorAll('textarea').forEach((textarea) => {
-          textarea.textContent = '';
-          textarea.value = '';
-        });
-        return new XMLSerializer().serializeToString(clone).slice(0, 300000);
-      }
+      }, (response) => {
+        if (chrome.runtime.lastError) return;
+        if (response?.risk === 'dangerous') showPageWarning(response.explanation);
+      });
     });
   }
 

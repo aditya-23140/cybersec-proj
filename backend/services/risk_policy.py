@@ -58,11 +58,11 @@ def _get_thresholds() -> dict:
     return {"safe": 0.35, "suspicious": 0.70}
 
 
-def probability_to_risk_level(probability: float) -> str:
+def probability_to_risk_level(probability: float, thresholds: dict | None = None) -> str:
     """Convert a phishing probability to a calibrated risk-level string."""
-    thresholds = _get_thresholds()
-    safe_threshold = thresholds.get("safe", 0.35)
-    suspicious_threshold = thresholds.get("suspicious", 0.70)
+    selected = thresholds or _get_thresholds()
+    safe_threshold = selected.get("safe", 0.35)
+    suspicious_threshold = selected.get("suspicious", 0.70)
 
     if probability < safe_threshold:
         return "safe"
@@ -162,6 +162,7 @@ def apply_policy(
                 "This result overrides the model prediction."
             ],
             "source": "blocklist",
+            "decided_by": "personal_blocklist",
             "verification_status": "blocked",
         }
 
@@ -187,7 +188,24 @@ def apply_policy(
                 "provider has reported this URL."
             ],
             "source": "reputation",
+            "decided_by": "threat_intel",
             "verification_status": "flagged_by_threat_intel",
+        }
+
+    # The detector's exact-root trust list is limited to the top 10,000
+    # registered domains. It never trusts arbitrary subdomains.
+    if raw_prediction.get("trusted_domain"):
+        return {
+            "prediction": "benign",
+            "risk_level": "safe",
+            "phishing_probability": min(probability, 0.02),
+            "warnings": [
+                "The exact registered domain is in the configured top-10k "
+                "allowlist; subdomains and page content are not covered by this trust."
+            ],
+            "source": "top10k_allowlist",
+            "decided_by": "top10k_allowlist",
+            "verification_status": verification_status,
         }
 
     # ------------------------------------------------------------------ #
@@ -324,8 +342,8 @@ def apply_policy(
     # ------------------------------------------------------------------ #
     # 8. Model-based classification & calibrated risk level
     # ------------------------------------------------------------------ #
-    risk_level = probability_to_risk_level(probability)
-    prediction = "phishing" if risk_level in ("suspicious", "dangerous") else "benign"
+    risk_level = probability_to_risk_level(probability, raw_prediction.get("risk_thresholds"))
+    prediction = "phishing" if risk_level == "dangerous" else "benign"
 
     # ------------------------------------------------------------------ #
     # 9. User personal allowlist
@@ -342,5 +360,6 @@ def apply_policy(
         "phishing_probability": round(probability, 6),
         "warnings": warnings,
         "source": "model",
+        "decided_by": "model",
         "verification_status": verification_status,
     }

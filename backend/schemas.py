@@ -47,16 +47,19 @@ class PageSignals(BaseModel):
 class PredictResponse(BaseModel):
     request_id: str
     url: str
-    prediction: str               # "benign" | "phishing"
+    prediction: str               # "benign" | "phishing"; suspicious remains benign
     risk_level: str               # "safe" | "suspicious" | "dangerous"
     phishing_probability: float = Field(ge=0.0, le=1.0)
     url_model_score: float | None = Field(None, ge=0.0, le=1.0)
     calibrated_url_model_score: float | None = Field(None, ge=0.0, le=1.0)
     model_version: str
     model_mode: str = "url-only"
+    content_ignored: bool = False
+    fetch_error: str | None = None
     warnings: list[str]
     explanation: str
     source: str
+    decided_by: str = "model"
     verification_status: str = "unknown"
     network_signals: dict[str, Any] = Field(default_factory=dict)
     domain_identity: dict[str, Any] = Field(default_factory=dict)

@@ -78,7 +78,7 @@ from phishing_model import _split_host, normalise_url
 warnings.filterwarnings("ignore")
 
 NAN = float("nan")
-HYBRID_VERSION = 1
+HYBRID_VERSION = 2
 MAX_HTML = 1_000_000
 
 # the old hand-written brand list features are dropped; replaced by dynamic ones below
@@ -86,7 +86,15 @@ _DROP = {"brand_in_subdomain_or_path", "brand_in_reg_domain_mismatch", "brand_mi
 URL_FEATURES = [f for f in pm.FEATURE_NAMES if f not in _DROP]
 _URL_IDX = [pm.FEATURE_NAMES.index(f) for f in URL_FEATURES]
 
-TOP_FEATURES = ["t_lookalike_dist", "t_brand_in_domain", "t_brand_in_sub_or_path", "t_n_brands_in_url"]
+TOP_FEATURES = [
+    "t_lookalike_dist", "t_brand_in_domain", "t_brand_in_sub_or_path",
+    "t_n_brands_in_url", "t_shared_hosting", "t_tranco_rank_log",
+]
+SHARED_HOSTING = {
+    "appspot.com", "blogspot.com", "firebaseapp.com", "github.io", "gitlab.io",
+    "netlify.app", "pages.dev", "repl.co", "vercel.app", "web.app",
+    "weeblysite.com", "wixsite.com", "square.site",
+}
 
 CONTENT_FEATURES = [
     "c_n_forms", "c_n_inputs", "c_n_password", "c_n_hidden_inputs", "c_n_email_inputs", "c_n_text_inputs",
@@ -142,6 +150,8 @@ class TopDomains:
     def __init__(self, domains):
         self.domains = [d.strip().lower() for d in domains if d and "." in d]
         self.reg = set(self.domains)
+        self.rank = {d: i + 1 for i, d in enumerate(self.domains)}
+        self.trusted_reg = set(self.domains[:10_000])
         self.labels, self.exact, self.variants = {}, {}, set()
         for rank, d in enumerate(self.domains):
             label = _split_host(d)[1]
@@ -202,6 +212,14 @@ class TopDomains:
             return 1
         return 2
 
+    def is_exact_popular(self, host):
+        """Trust only exact roots in the top 10,000; rank is independent."""
+        try:
+            _sub, _dom, _suffix, reg = _split_host(host)
+            return reg in self.trusted_reg and host in {reg, f"www.{reg}"}
+        except Exception:
+            return False
+
 
 _IP_RE = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
 
@@ -213,7 +231,7 @@ def top_features(url, top):
     try:
         host, path, query, _ = normalise_url(url)
         if _IP_RE.match(host):
-            return [2, 0, 0, 0]
+            return [2, 0, 0, 0, 0, math.log1p(1_000_000)]
         sub, dom, _suf, reg = _split_host(host)
         reg = reg or host
         look = top.lookalike(dom, reg) if dom else 2
@@ -223,7 +241,8 @@ def top_features(url, top):
             r = top.brand_hit(tok)
             if r and r != reg:
                 h_sp.add(r)
-        return [look, int(bool(h_dom)), int(bool(h_sp)), len(h_dom | h_sp)]
+        return [look, int(bool(h_dom)), int(bool(h_sp)), len(h_dom | h_sp),
+                int(reg in SHARED_HOSTING), math.log1p(top.rank.get(reg, 1_000_000))]
     except Exception:
         return [NAN] * n
 
@@ -620,9 +639,30 @@ def _mask(X):
 def train(args):
     from sklearn.isotonic import IsotonicRegression
     from sklearn.model_selection import GroupKFold, GroupShuffleSplit, RandomizedSearchCV
+    from sklearn.metrics import roc_auc_score
 
     rng = np.random.default_rng(pm.SEED)
-    frames = [pm.load_dataset(s, i) for i, s in enumerate(args.data)]
+    if args.n_iter < 25:
+        raise SystemExit("--n-iter must be at least 25 for the production training path.")
+    frames = []
+    for i, spec in enumerate(args.data):
+        source_path, *parts = [p.strip() for p in spec.split(",")]
+        raw = pd.read_csv(source_path, low_memory=False)
+        label_col = parts[1] if len(parts) > 1 and parts[1] else next(
+            (c for c in pm._LABEL_COLS if c in raw.columns), None
+        )
+        if label_col is None:
+            raise SystemExit(f"{source_path}: no label column for audit")
+        print(f"[labels] {source_path}: raw {raw[label_col].value_counts(dropna=False).to_dict()}")
+        frame = pm.load_dataset(spec, i)
+        print(f"[labels] {source_path}: mapped y {frame.y.value_counts().to_dict()}")
+        frames.append(frame)
+    host_sources = {s.strip().lower() for s in args.host_level_sources.split(",") if s.strip()}
+    for spec, frame in zip(args.data, frames):
+        source_name = os.path.basename(spec.split(",")[0]).lower()
+        if any(name in source_name for name in host_sources):
+            frame["url"] = frame["url"].map(lambda u: pm.normalise_url(u)[0])
+            print(f"[data] host-level URL normalization: {source_name}")
     names = [s.split(",")[0] for s in args.data]
     df = pm.prepare(pd.concat(frames, ignore_index=True), args.per_domain_cap)
     if args.max_rows and len(df) > args.max_rows:
@@ -651,6 +691,15 @@ def train(args):
         print(f"[content] balanced coverage -> {df.groupby('y')['use_snap'].mean().round(3).to_dict()}")
     elif args.snapshots:
         print("[warn] one class has no pages at all; the model will not learn content signals reliably")
+    if args.snapshots and cov.min() < 0.20:
+        raise SystemExit("Snapshot coverage must be at least 20% in both classes.")
+    if args.snapshots:
+        successful = df.groupby("y")["has_snap"].sum()
+        if successful.min() < args.min_snapshots_per_class:
+            raise SystemExit(
+                f"Need at least {args.min_snapshots_per_class} successful snapshots per class; "
+                f"observed {successful.to_dict()}."
+            )
 
     t0 = time.time()
     X_all = build_features(df.url, df.use_snap, args.snapshots, top, args.workers)
@@ -667,6 +716,9 @@ def train(args):
     tr, va = gsplit(rest, 0.10 / 0.80)
     print(f"[split] train {len(tr):,} | val {len(va):,} | cal {len(ca):,} | test {len(te):,} (disjoint domains)")
 
+    train_shortcut_urls = []
+    train_shortcut_y = []
+
     def make_set(idx, mask_frac, augment=False):
         X = X_all.iloc[idx].reset_index(drop=True)
         y, g, has = y_all[idx], g_all[idx], has_all[idx]
@@ -679,6 +731,11 @@ def train(args):
                 Xs.append(build_features(aug.url, [False] * len(aug), None, top))
                 ys.append(aug.y.values)
                 gs.append(aug.group.values)
+                if idx is tr:
+                    train_shortcut_urls.extend(sub.url.tolist())
+                    train_shortcut_urls.extend(aug.url.tolist())
+                    train_shortcut_y.extend(sub.y.tolist())
+                    train_shortcut_y.extend(aug.y.tolist())
         return pd.concat(Xs, ignore_index=True), np.concatenate(ys), np.concatenate(gs)
 
     Xtr, ytr, gtr = make_set(tr, 0.25, augment=True)
@@ -686,6 +743,21 @@ def train(args):
     Xca, yca, _ = make_set(ca, 1.0)
     spw = float((ytr == 0).sum() / max((ytr == 1).sum(), 1))
     print(f"[balance] scale_pos_weight = {spw:.3f} | train rows incl. augmentation {len(ytr):,}")
+    if train_shortcut_urls and len(set(train_shortcut_y)) > 1:
+        shortcut = pm.featurise(train_shortcut_urls)
+        shortcut["has_path"] = (shortcut["path_len"] > 0).astype(int)
+        shortcut["has_query"] = (shortcut["query_len"] > 0).astype(int)
+        shortcut["https"] = [int(str(u).lower().startswith("https://")) for u in train_shortcut_urls]
+        shortcut_x = shortcut[["has_path", "has_query", "url_len", "https"]]
+        audit_model = pm._make_xgb({"max_depth": 2, "n_estimators": 50}, 1.0, eval_metric="auc")
+        audit_model.fit(shortcut_x, train_shortcut_y)
+        shortcut_auc = float(roc_auc_score(
+            train_shortcut_y, audit_model.predict_proba(shortcut_x)[:, 1]
+        ))
+        print(f"[shortcut-audit] exact post-normalization/augmentation rows AUC={shortcut_auc:.4f}")
+        rep_shortcut_auc = shortcut_auc
+    else:
+        rep_shortcut_auc = float("nan")
 
     space = {"max_depth": [3, 4, 5, 6, 7], "learning_rate": [0.03, 0.05, 0.08, 0.1],
              "min_child_weight": [3, 5, 10, 20], "subsample": [0.6, 0.7, 0.8, 0.9],
@@ -713,10 +785,18 @@ def train(args):
     Xte, yte, has_te = X_all.iloc[te].reset_index(drop=True), y_all[te], has_all[te]
     p_full, p_url = pred(Xte), pred(_mask(Xte))
     rep = {"test_natural": pm._metrics(yte, p_full, t_high), "test_url_only_mode": pm._metrics(yte, p_url, t_high)}
+    rep["shortcut_auc_model_input_rows"] = rep_shortcut_auc
+    rep["training_class_prior_phishing"] = float(df.y.mean())
+    rep["snapshot_coverage"] = {
+        "has_snap_by_class": {str(k): int(v) for k, v in df.groupby("y").has_snap.sum().items()},
+        "use_snap_by_class": {str(k): int(v) for k, v in df.groupby("y").use_snap.sum().items()},
+    }
     if has_te.sum() > 50 and len(set(yte[has_te])) > 1:
         rep["pages_with_content__hybrid"] = pm._metrics(yte[has_te], p_full[has_te], t_high)
         rep["pages_with_content__url_only"] = pm._metrics(yte[has_te], p_url[has_te], t_high)
-    fmt = lambda d: {k: round(v, 4) for k, v in d.items() if k in ("accuracy", "recall", "specificity", "f1", "roc_auc")}
+    fmt = lambda d: ({k: round(v, 4) for k, v in d.items()
+                      if k in ("accuracy", "recall", "specificity", "f1", "roc_auc")}
+                    if isinstance(d, dict) else d)
     for k, v in rep.items():
         print(f"[test] {k:34s}", fmt(v))
     rep["train_test_auc_gap"] = float(pm._metrics(ytr, model.predict_proba(Xtr)[:, 1], 0.5)["roc_auc"]
@@ -747,11 +827,16 @@ def train(args):
     t_low, t_high = pm._pick_thresholds(yca, iso2.predict(final.predict_proba(Xca)[:, 1]),
                                         args.target_fpr, args.target_recall)
     imp = dict(sorted(zip(FEATURES, map(float, final.feature_importances_)), key=lambda kv: -kv[1]))
+    content_trained = bool(df.use_snap.any() and any(
+        float(imp.get(name, 0.0)) > 0.0 for name in CONTENT_FEATURES
+    ))
     bundle = {"model": final, "calibrator": iso2, "feature_names": FEATURES, "version": HYBRID_VERSION,
               "top_domains": top.domains if top else None, "t_low": t_low, "t_high": t_high,
-              "params": best, "n_trees": n_trees, "report": rep, "importances": imp}
+              "params": best, "n_trees": n_trees, "report": rep, "importances": imp,
+              "content_trained": content_trained}
     joblib.dump(bundle, args.out, compress=3)
-    json.dump({"report": rep, "params": best, "t_low": t_low, "t_high": t_high, "importances": imp},
+    json.dump({"report": rep, "params": best, "t_low": t_low, "t_high": t_high,
+               "importances": imp, "content_trained": content_trained},
               open(args.out + ".report.json", "w"), indent=2, default=float)
     print(f"[saved] {args.out} (+ .report.json)\n[top features] {list(imp)[:10]}")
 
@@ -760,13 +845,14 @@ def train(args):
 # Inference
 # --------------------------------------------------------------------------- #
 class HybridDetector:
-    def __init__(self, bundle, allow_private=False):
+    def __init__(self, bundle, allow_private=False, trust_popular=True):
         if bundle.get("version") != HYBRID_VERSION or bundle["feature_names"] != FEATURES:
             raise RuntimeError("Model/feature mismatch - retrain with this version of the script.")
         self.b, self.model, self.cal = bundle, bundle["model"], bundle["calibrator"]
         self.t_low, self.t_high = bundle["t_low"], bundle["t_high"]
         self.top = TopDomains(bundle["top_domains"]) if bundle.get("top_domains") else None
         self.allow_private = allow_private
+        self.trust_popular = trust_popular
 
     @classmethod
     def load(cls, path, **kw):
@@ -781,16 +867,36 @@ class HybridDetector:
         """Score one URL. Pass html (e.g. the rendered DOM from a browser extension) to skip fetching."""
         if not pm._ok(url):
             return {"url": url, "verdict": "unknown", "probability": None, "error": "unparseable url"}
+        host = pm.normalise_url(url)[0]
+        _sub, _dom, _suffix, reg = _split_host(host)
+        trusted_exact = bool(self.top and self.top.is_exact_popular(host))
+        content_trained = bool(self.b.get("content_trained", False))
+        if self.trust_popular and trusted_exact and html is None and not fetch:
+            return {
+                "url": url, "probability": 0.0, "verdict": "safe",
+                "mode": "url-only", "content_ignored": not content_trained,
+                "trusted_domain": True,
+                "reasons": [{"feature": "known_popular_registered_domain", "value": reg, "push": 0.0}],
+            }
         snap = None
         if html is not None:
             snap = {"url": url, "final_url": final_url or url, "html": html, "redirects": 0}
         elif fetch:
             snap = fetch_page(url, allow_private=self.allow_private)
+        elif html is None:
+            snap = {"url": url, "final_url": url, "html": None,
+                    "error": "server fetch disabled; no caller-supplied HTML"}
         X = pd.DataFrame([self._row(url, snap)], columns=FEATURES)
         p = float(self.cal.predict(self.model.predict_proba(X)[:, 1])[0])
+        content_used = bool(snap and snap.get("html") and content_trained)
+        if self.trust_popular and trusted_exact:
+            p = 0.0
         verdict = "phishing" if p >= self.t_high else ("suspicious" if p >= self.t_low else "safe")
         res = {"url": url, "probability": round(p, 4), "verdict": verdict,
-               "mode": "url+content" if (snap and snap.get("html")) else "url-only"}
+               "mode": "url+content" if content_used else "url-only"}
+        res["trusted_domain"] = trusted_exact
+        if not content_used and not content_trained:
+            res["content_ignored"] = True
         if snap and not snap.get("html"):
             res["fetch_error"] = snap.get("error")
         try:  # per-feature push toward 'phishing' (log-odds of the raw model)
@@ -833,6 +939,9 @@ def main():
     t.add_argument("--workers", type=int, default=min(8, os.cpu_count() or 1))
     t.add_argument("--target-fpr", type=float, default=0.02)
     t.add_argument("--target-recall", type=float, default=0.97)
+    t.add_argument("--host-level-sources", default="phiusiil",
+                   help="comma-separated source filename fragments whose paths/queries are stripped")
+    t.add_argument("--min-snapshots-per-class", type=int, default=5000)
     t.add_argument("--no-augment", action="store_true")
 
     a = sub.add_parser("analyze")
@@ -840,6 +949,8 @@ def main():
     a.add_argument("--no-fetch", action="store_true", help="URL-only scoring")
     a.add_argument("--html", help="analyse this local HTML file as the page content")
     a.add_argument("--allow-private", action="store_true", help=argparse.SUPPRESS)
+    a.add_argument("--no-popular-trust", action="store_true",
+                   help="disable exact registered popular-domain trust")
     a.add_argument("urls", nargs="+")
 
     args = ap.parse_args()
@@ -848,7 +959,8 @@ def main():
     elif args.cmd == "train":
         train(args)
     else:
-        det = HybridDetector.load(args.model, allow_private=args.allow_private)
+        det = HybridDetector.load(args.model, allow_private=args.allow_private,
+                                  trust_popular=not args.no_popular_trust)
         html = open(args.html, encoding="utf-8", errors="replace").read() if args.html else None
         print(json.dumps([det.analyze(u, html=html, fetch=not args.no_fetch) for u in args.urls], indent=2))
 

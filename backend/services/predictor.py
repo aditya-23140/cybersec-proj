@@ -127,7 +127,7 @@ def predict(
             url,
             html=page_html,
             final_url=url,
-            fetch=False,
+            fetch=page_html is None and config.HYBRID_FETCH_ENABLED,
         )
         if result.get("error"):
             raise ValueError(result["error"])
@@ -135,7 +135,7 @@ def predict(
         verdict = result["verdict"]
         result = {
             "url": url,
-            "prediction": "phishing" if verdict != "safe" else "benign",
+            "prediction": "phishing" if verdict == "phishing" else "benign",
             "risk_level": (
                 "dangerous" if verdict == "phishing"
                 else "suspicious" if verdict == "suspicious"
@@ -145,15 +145,22 @@ def predict(
             "url_model_score": probability if result.get("mode") == "url-only" else None,
             "calibrated_url_model_score": probability if result.get("mode") == "url-only" else None,
             "model_version": "hybrid-v1",
+            "content_ignored": bool(result.get("content_ignored", False)),
             "warnings": (
                 [f"Hybrid page analysis unavailable: {result['fetch_error']}"]
                 if result.get("fetch_error") else []
             ),
+            "fetch_error": result.get("fetch_error"),
             "explanation": (
                 f"The hybrid model assigned a {verdict} risk "
                 f"({probability:.1%} phishing probability) in {result.get('mode', 'url-only')} mode."
             ),
             "model_mode": result.get("mode", "url-only"),
+            "trusted_domain": bool(result.get("trusted_domain", False)),
+            "risk_thresholds": {
+                "safe": _predictor.t_low,
+                "suspicious": _predictor.t_high,
+            },
             "reasons": result.get("reasons", []),
         }
     else:

@@ -74,11 +74,11 @@ export default function Shell({ children }) {
 
 function FihhMark() {
   return <svg width="28" height="28" viewBox="0 0 64 64" fill="none">
-    <path d="M44 32 60 20q-2 12 0 24Z" fill="var(--accent)" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-    <ellipse cx="28" cy="32" rx="19" ry="14" fill="var(--accent)" stroke="currentColor" strokeWidth="2" />
-    <path d="M26 38q4 10 12 6-4-4-6-8Z" fill="var(--accent)" stroke="currentColor" strokeWidth="2" />
-    <circle cx="17" cy="29" r="3" fill="currentColor" />
-    <circle cx="16" cy="28" r="1" fill="var(--paper)" />
-    <path d="M10 36q3 2 6 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M44 32 60 20q-2 12 0 24Z" fill="var(--accent)" stroke="#111111" strokeWidth="2" strokeLinejoin="round" />
+    <ellipse cx="28" cy="32" rx="19" ry="14" fill="var(--accent)" stroke="#111111" strokeWidth="2" />
+    <path d="M26 38q4 10 12 6-4-4-6-8Z" fill="var(--accent)" stroke="#111111" strokeWidth="2" />
+    <circle cx="17" cy="29" r="3" fill="#111111" />
+    <circle cx="16" cy="28" r="1" fill="#FFFFFF" />
+    <path d="M10 36q3 2 6 0" stroke="#111111" strokeWidth="2" strokeLinecap="round" />
   </svg>;
 }

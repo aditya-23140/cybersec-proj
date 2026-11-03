@@ -329,9 +329,12 @@ def predict(
         calibrated_url_model_score=raw.get("calibrated_url_model_score"),
         model_version=raw.get("model_version", config.MODEL_VERSION),
         model_mode=raw.get("model_mode", "url-only"),
+        content_ignored=raw.get("content_ignored", False),
+        fetch_error=raw.get("fetch_error"),
         warnings=warnings,
         explanation=explanation,
         source=source,
+        decided_by=policy.get("decided_by", "model" if source == "model" else source),
         verification_status=verification_status,
         network_signals=raw.get("network_signals", {}),
         domain_identity={
@@ -347,6 +350,10 @@ def predict(
         },
         evidence_summary={
             "model_mode": raw.get("model_mode", "url-only"),
+            "content_ignored": raw.get("content_ignored", False),
+            "decided_by": policy.get("decided_by", "model" if source == "model" else source),
+            "risk_thresholds": raw.get("risk_thresholds"),
+            "fetch_error": raw.get("fetch_error"),
             "hybrid_reasons": raw.get("reasons", []),
             "dns_resolved": raw.get("network_signals", {})
             .get("dns", {})
