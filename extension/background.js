@@ -61,8 +61,17 @@ async function handleCheckUrl(url, sender, sendResponse) {
   let backendUrl = DEFAULT_BACKEND_URL;
 
   try {
-    const stored = await chrome.storage.sync.get({ backendUrl: DEFAULT_BACKEND_URL });
+    const stored = await chrome.storage.sync.get({
+      backendUrl: DEFAULT_BACKEND_URL,
+      allowlist: [],
+      autoScan: true,
+    });
     backendUrl = stored.backendUrl || DEFAULT_BACKEND_URL;
+    const hostname = new URL(url).hostname;
+    if (stored.autoScan === false || stored.allowlist.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))) {
+      sendResponse({ action: 'navigate' });
+      return;
+    }
   } catch (_) {
     // Use default if storage read fails
   }

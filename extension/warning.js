@@ -27,17 +27,23 @@
   const container = document.getElementById('warning-container');
 
   if (risk === 'dangerous') {
-    iconArea.textContent  = '🚨';
-    headline.textContent  = 'Warning: This Link May Be Dangerous';
-    container.style.borderTop = '4px solid #ef4444';
+    iconArea.innerHTML = mascot('alarmed');
+    headline.textContent = 'wait. this link looks dangerous.';
   } else if (risk === 'suspicious') {
-    iconArea.textContent  = '⚠️';
-    headline.textContent  = 'Suspicious Link Detected';
-    container.style.borderTop = '4px solid #f97316';
+    iconArea.innerHTML = mascot('sidee');
+    headline.textContent = "hmm. this one's giving sketchy.";
   } else {
-    iconArea.textContent  = '❓';
-    headline.textContent  = 'Link Safety Unknown';
-    container.style.borderTop = '4px solid #64748b';
+    iconArea.innerHTML = mascot('unknown');
+    headline.textContent = "couldn't read this link.";
+  }
+
+  function mascot(mood) {
+    const expression = mood === 'alarmed' || mood === 'sidee' ? mood : 'unknown';
+    const eye = `<circle cx="17" cy="29" r="${expression === 'alarmed' ? 4 : 3}" fill="currentColor"/><circle cx="${expression === 'sidee' ? 15.8 : 16}" cy="28" r="1" fill="var(--paper)"/>`;
+    const face = expression === 'alarmed'
+      ? '<circle cx="12" cy="36" r="1.8" stroke="currentColor" stroke-width="1.6"/><path d="m8 22-2-3m6 2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
+      : '<path d="M12 24 21 25M10 36h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+    return `<svg class="fihh-warning" viewBox="0 0 64 64" fill="none" role="img" aria-label="${expression} Fihh"><path d="M44 32 60 20q-2 12 0 24Z" fill="var(--accent)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><ellipse cx="28" cy="32" rx="19" ry="14" fill="var(--accent)" stroke="currentColor" stroke-width="2"/><path d="M26 38q4 10 12 6-4-4-6-8Z" fill="var(--accent)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>${eye}${face}</svg>`;
   }
 
   // --- Phishing probability ---

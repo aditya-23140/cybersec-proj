@@ -128,6 +128,8 @@ python -m pytest tests/ -v
 
 **Settings:**
 - Click the extension icon → settings gear → change backend URL if needed
+- The settings page includes auto-scan, sensitivity, theme-ready privacy controls,
+  and a first-run onboarding walkthrough.
 
 **What the extension protects:**
 - ✅ HTTP/HTTPS link clicks on ordinary web pages
@@ -155,6 +157,13 @@ npm run dev
 
 Open http://localhost:3000
 
+The web app uses the Next.js App Router. The shared visual language lives in
+[`design/tokens.css`](./design/tokens.css), which is imported by both web and
+extension styles. It defines Paper/Ink neutrals, Electric Lime brand actions,
+verdict colours, sticker shadows, radii, and light/dark theme variables.
+Mascot, verdict, risk-meter, reason-list, scan-mode, and URL-input components
+are shared within `frontend/app/components/`.
+
 **Pages:**
 | URL | Feature |
 |---|---|
@@ -166,6 +175,11 @@ Open http://localhost:3000
 | `/education` | Phishing prevention guide |
 | `/login` | Login |
 | `/register` | Register |
+
+The extension can be loaded as an unpacked MV3 extension from `extension/`.
+Its popup is designed for a 360px toolbar surface, caches the latest result
+locally for instant opening, and sends only the existing URL/page-signal
+payloads to the configured backend.
 
 ---
 

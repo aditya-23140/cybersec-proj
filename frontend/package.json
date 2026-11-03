@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:contrast": "playwright test tests/contrast-guard.spec.js"
   },
   "dependencies": {
     "next": "14.2.5",
@@ -14,5 +15,8 @@
     "react-dom": "^18",
     "axios": "^1.7.2",
     "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.45.0"
   }
 }
