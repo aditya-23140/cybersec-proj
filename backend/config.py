@@ -19,6 +19,7 @@ except ImportError:
 # ML / model
 # --------------------------------------------------------------------------- #
 ML_ARTIFACTS_DIR: str = os.getenv("ML_ARTIFACTS_DIR", "../ml/artifacts")
+HYBRID_MODEL_FILE: str = os.getenv("HYBRID_MODEL_FILE", "hybrid.joblib")
 
 # --------------------------------------------------------------------------- #
 # Database

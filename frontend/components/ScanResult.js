@@ -33,6 +33,11 @@ export default function ScanResult({ result }) {
           {' '} (supporting signal only)
         </p>
       )}
+      {(result.model_mode || result.evidence_summary?.model_mode) && (
+        <p className={styles.meta}>
+          Model mode: {result.model_mode || result.evidence_summary.model_mode}
+        </p>
+      )}
       {result.warnings && result.warnings.length > 0 && (
         <ul className={styles.warnings}>
           {result.warnings.map((w, i) => <li key={i}>{w}</li>)}

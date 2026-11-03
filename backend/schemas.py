@@ -17,6 +17,11 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class PredictRequest(BaseModel):
     url: str = Field(..., min_length=1, description="URL to analyse")
     page_signals: "PageSignals | None" = None
+    page_html: str | None = Field(
+        None,
+        max_length=300_000,
+        description="Sanitized page DOM used by the hybrid model",
+    )
 
     @field_validator("url")
     @classmethod
@@ -48,6 +53,7 @@ class PredictResponse(BaseModel):
     url_model_score: float | None = Field(None, ge=0.0, le=1.0)
     calibrated_url_model_score: float | None = Field(None, ge=0.0, le=1.0)
     model_version: str
+    model_mode: str = "url-only"
     warnings: list[str]
     explanation: str
     source: str

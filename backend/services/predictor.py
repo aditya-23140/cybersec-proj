@@ -20,9 +20,10 @@ import config
 logger = logging.getLogger(__name__)
 
 # Module-level state -------------------------------------------------------- #
-_predictor: Any = None          # PhishingPredictor instance or None
+_predictor: Any = None          # HybridDetector or PhishingPredictor instance
 _threshold_config: dict | None = None
 _model_loaded: bool = False
+_model_kind: str | None = None
 
 
 def load_predictor() -> None:
@@ -31,7 +32,7 @@ def load_predictor() -> None:
     Called once from the FastAPI lifespan hook.
     On any failure the predictor stays None (503 returned to callers).
     """
-    global _predictor, _threshold_config, _model_loaded
+    global _predictor, _threshold_config, _model_loaded, _model_kind
 
     artifacts_dir = Path(config.ML_ARTIFACTS_DIR).resolve()
     ml_root = artifacts_dir.parent  # …/ml/
@@ -48,9 +49,6 @@ def load_predictor() -> None:
         except Exception as exc:
             logger.warning("Could not read threshold_config.json: %s", exc)
 
-    # ------------------------------------------------------------------ #
-    # Import PhishingPredictor
-    # ------------------------------------------------------------------ #
     if not artifacts_dir.exists():
         logger.warning(
             "ML artifacts directory not found: %s — model will be unavailable.",
@@ -62,16 +60,27 @@ def load_predictor() -> None:
     if ml_root_str not in sys.path:
         sys.path.insert(0, ml_root_str)
 
+    hybrid_path = artifacts_dir / config.HYBRID_MODEL_FILE
     try:
+        if hybrid_path.exists():
+            from phishing_hybrid import HybridDetector  # type: ignore[import]
+
+            _predictor = HybridDetector.load(str(hybrid_path))
+            _model_kind = "hybrid"
+            _model_loaded = True
+            logger.info("HybridDetector loaded successfully from %s", hybrid_path)
+            return
+
         from src.predict import PhishingPredictor  # type: ignore[import]
 
         _predictor = PhishingPredictor(artifacts_dir=str(artifacts_dir))
+        _model_kind = "url"
         _model_loaded = True
         logger.info("PhishingPredictor loaded successfully from %s", artifacts_dir)
     except ModuleNotFoundError as exc:
-        logger.warning("ml.src.predict not found (%s) — model unavailable.", exc)
+        logger.warning("ML predictor dependency not found (%s) — model unavailable.", exc)
     except Exception as exc:
-        logger.error("Failed to load PhishingPredictor: %s", exc, exc_info=True)
+        logger.error("Failed to load phishing predictor: %s", exc, exc_info=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -90,7 +99,16 @@ def get_threshold_config() -> dict | None:
     return _threshold_config
 
 
-def predict(url: str) -> dict[str, Any]:
+def get_model_kind() -> str | None:
+    return _model_kind
+
+
+def predict(
+    url: str,
+    *,
+    page_html: str | None = None,
+    page_signals: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Run inference on *url*.
 
@@ -104,10 +122,47 @@ def predict(url: str) -> dict[str, Any]:
     if not _model_loaded or _predictor is None:
         raise RuntimeError("Model is not loaded")
 
-    result = _predictor.predict(url)
+    if _model_kind == "hybrid":
+        result = _predictor.analyze(
+            url,
+            html=page_html,
+            final_url=url,
+            fetch=False,
+        )
+        if result.get("error"):
+            raise ValueError(result["error"])
+        probability = float(result["probability"])
+        verdict = result["verdict"]
+        result = {
+            "url": url,
+            "prediction": "phishing" if verdict != "safe" else "benign",
+            "risk_level": (
+                "dangerous" if verdict == "phishing"
+                else "suspicious" if verdict == "suspicious"
+                else "safe"
+            ),
+            "phishing_probability": probability,
+            "url_model_score": probability if result.get("mode") == "url-only" else None,
+            "calibrated_url_model_score": probability if result.get("mode") == "url-only" else None,
+            "model_version": "hybrid-v1",
+            "warnings": (
+                [f"Hybrid page analysis unavailable: {result['fetch_error']}"]
+                if result.get("fetch_error") else []
+            ),
+            "explanation": (
+                f"The hybrid model assigned a {verdict} risk "
+                f"({probability:.1%} phishing probability) in {result.get('mode', 'url-only')} mode."
+            ),
+            "model_mode": result.get("mode", "url-only"),
+            "reasons": result.get("reasons", []),
+        }
+    else:
+        result = _predictor.predict(url)
 
     # Normalise the result dict so downstream code can rely on consistent keys
     if isinstance(result, dict):
+        if page_signals:
+            result["page_signals"] = page_signals
         return result
 
     # Some predictor implementations return a tuple (label, prob)

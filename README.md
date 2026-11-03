@@ -51,6 +51,26 @@ python -m pytest tests/ -v
 > ⚠️ Metrics in `eval_results.json` are real measurements from this run.  
 > The paper's reported results (90.7% accuracy, 91.2% F1) are **not** reproduced here — they are from a different dataset and experimental setup.
 
+### Standalone URL + page-content model
+
+The backend prefers `artifacts/hybrid.joblib` and falls back to the legacy
+URL-only artifact when the hybrid bundle is unavailable. The extension sends
+aggregate page signals plus a bounded DOM snapshot with form values removed;
+the backend does not persist that snapshot.
+
+```bash
+cd ml
+python phishing_hybrid.py train \
+  --data data/phiusiil.csv,URL,label,0 \
+  --top-domains data/tranco/top-1m.csv \
+  --top-n 10000 \
+  --out artifacts/hybrid.joblib
+```
+
+Without a DOM snapshot, content features are missing and the model operates in
+URL-only mode. To enable page-content features during training, crawl labelled
+URLs first and pass the snapshot directory with `--snapshots`.
+
 ---
 
 ## 2. Backend — FastAPI Server
@@ -233,7 +253,7 @@ Thresholds are **selected from the validation set** using F1 maximization — no
 
 ## 8. Known Limitations
 
-- **Coverage limits:** The model analyses URL patterns. The browser extension can add aggregate page-structure signals, while the API can optionally add live DNS, WHOIS, TLS, and reputation signals. None of these independently verifies website ownership or page safety.
+- **Coverage limits:** The hybrid model analyses URL patterns and, when supplied, a bounded sanitized DOM snapshot. The browser extension can also add live DNS, WHOIS, TLS, and reputation signals. None of these independently verifies website ownership or page safety.
 - **False positives:** Legitimate sites with brand keywords or unusual URL structures may be flagged.
 - **Cross-dataset degradation:** As shown in the research paper, performance on URLs from different sources/time periods is typically lower than in-distribution test performance.
 - **No real-time updates:** The model is static post-training. New phishing patterns require retraining.

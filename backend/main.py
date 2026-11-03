@@ -113,10 +113,11 @@ def health():
 
 @app.get(f"{PREFIX}/model-info")
 def model_info():
-    from services.predictor import get_threshold_config, is_model_loaded
+    from services.predictor import get_model_kind, get_threshold_config, is_model_loaded
     return {
         "model_version": config.MODEL_VERSION,
         "artifacts_dir": config.ML_ARTIFACTS_DIR,
         "model_loaded": is_model_loaded(),
         "threshold_config": get_threshold_config(),
+        "model_kind": get_model_kind(),
     }

@@ -27,34 +27,51 @@
       }
     }).length;
 
+    const pageSignals = {
+      title_length: document.title.length,
+      has_password_field: Boolean(document.querySelector('input[type="password"]')),
+      external_form_count: externalFormCount,
+      iframe_count: document.querySelectorAll('iframe').length,
+      external_reference_count: Array.from(document.querySelectorAll('[src], [href]'))
+        .filter((element) => {
+          try {
+            const value = element.src || element.href;
+            return value && new URL(value, pageUrl).hostname !== pageHost;
+          } catch (_) {
+            return false;
+          }
+        }).length,
+      suspicious_text_hits: (document.body?.innerText || '')
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((word) => /verify|urgent|suspend|password|wallet|billing/.test(word)).length,
+      has_favicon: Boolean(document.querySelector('link[rel~="icon"]')),
+      page_is_https: window.location.protocol === 'https:',
+      page_html: sanitisedPageHtml(),
+    };
+
     chrome.runtime.sendMessage({
       type: 'PAGE_SIGNALS',
       url: pageUrl,
-      pageSignals: {
-        title_length: document.title.length,
-        has_password_field: Boolean(document.querySelector('input[type="password"]')),
-        external_form_count: externalFormCount,
-        iframe_count: document.querySelectorAll('iframe').length,
-        external_reference_count: Array.from(document.querySelectorAll('[src], [href]'))
-          .filter((element) => {
-            try {
-              const value = element.src || element.href;
-              return value && new URL(value, pageUrl).hostname !== pageHost;
-            } catch (_) {
-              return false;
-            }
-          }).length,
-        suspicious_text_hits: (document.body?.innerText || '')
-          .toLowerCase()
-          .split(/\s+/)
-          .filter((word) => /verify|urgent|suspend|password|wallet|billing/.test(word)).length,
-        has_favicon: Boolean(document.querySelector('link[rel~="icon"]')),
-        page_is_https: window.location.protocol === 'https:',
-      },
+      pageSignals: { ...pageSignals, page_html: undefined },
+      pageHtml: pageSignals.page_html,
     }, (response) => {
       if (chrome.runtime.lastError) return;
       if (response?.risk === 'dangerous') {
         showPageWarning(response.explanation);
+      }
+
+      function sanitisedPageHtml() {
+        const clone = document.documentElement.cloneNode(true);
+        clone.querySelectorAll('input').forEach((input) => {
+          input.removeAttribute('value');
+          input.value = '';
+        });
+        clone.querySelectorAll('textarea').forEach((textarea) => {
+          textarea.textContent = '';
+          textarea.value = '';
+        });
+        return new XMLSerializer().serializeToString(clone).slice(0, 300000);
       }
     });
   }

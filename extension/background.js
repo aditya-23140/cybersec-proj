@@ -10,12 +10,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // Keep channel open for async response
   }
   if (message.type === 'PAGE_SIGNALS' && sender.tab?.id != null) {
-    handlePageSignals(message.url, message.pageSignals, sender.tab.id, sendResponse);
+    handlePageSignals(
+      message.url,
+      message.pageSignals,
+      message.pageHtml,
+      sender.tab.id,
+      sendResponse,
+    );
     return true;
   }
 });
 
-async function handlePageSignals(url, pageSignals, tabId, sendResponse) {
+async function handlePageSignals(url, pageSignals, pageHtml, tabId, sendResponse) {
   let backendUrl = DEFAULT_BACKEND_URL;
   try {
     const stored = await chrome.storage.sync.get({ backendUrl: DEFAULT_BACKEND_URL });
@@ -23,7 +29,11 @@ async function handlePageSignals(url, pageSignals, tabId, sendResponse) {
     const res = await fetch(`${backendUrl}/api/v1/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, page_signals: pageSignals }),
+      body: JSON.stringify({
+        url,
+        page_signals: pageSignals,
+        page_html: pageHtml || undefined,
+      }),
       signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`Backend returned HTTP ${res.status}`);

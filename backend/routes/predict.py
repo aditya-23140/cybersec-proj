@@ -253,7 +253,11 @@ def predict(
     # 4. Run model
     # ------------------------------------------------------------------ #
     try:
-        raw = predictor_svc.predict(url)
+        raw = predictor_svc.predict(
+            url,
+            page_html=body.page_html,
+            page_signals=body.page_signals.model_dump() if body.page_signals else None,
+        )
     except RuntimeError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -321,7 +325,10 @@ def predict(
         prediction=prediction,
         risk_level=risk_level,
         phishing_probability=probability,
-        model_version=config.MODEL_VERSION,
+        url_model_score=raw.get("url_model_score"),
+        calibrated_url_model_score=raw.get("calibrated_url_model_score"),
+        model_version=raw.get("model_version", config.MODEL_VERSION),
+        model_mode=raw.get("model_mode", "url-only"),
         warnings=warnings,
         explanation=explanation,
         source=source,
@@ -339,6 +346,8 @@ def predict(
             ),
         },
         evidence_summary={
+            "model_mode": raw.get("model_mode", "url-only"),
+            "hybrid_reasons": raw.get("reasons", []),
             "dns_resolved": raw.get("network_signals", {})
             .get("dns", {})
             .get("dns_resolves"),
