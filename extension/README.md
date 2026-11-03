@@ -35,19 +35,20 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 
 ## Files
 
-| File | Purpose |
-|------|---------|
-| `manifest.json` | Chrome extension manifest (MV3) |
-| `background.js` | Service worker — handles URL check API calls |
-| `content.js` | Injected into pages — intercepts link clicks |
-| `popup.html/js/css` | Extension popup with manual URL checker |
-| `warning.html/js/css` | Full-page warning shown for risky URLs |
-| `settings.html/js` | Options page for backend URL configuration |
-| `icons/` | Extension icons (16×16, 48×48, 128×128) |
+| File                  | Purpose                                      |
+| --------------------- | -------------------------------------------- |
+| `manifest.json`       | Chrome extension manifest (MV3)              |
+| `background.js`       | Service worker — handles URL check API calls |
+| `content.js`          | Injected into pages — intercepts link clicks |
+| `popup.html/js/css`   | Extension popup with manual URL checker      |
+| `warning.html/js/css` | Full-page warning shown for risky URLs       |
+| `settings.html/js`    | Options page for backend URL configuration   |
+| `icons/`              | Extension icons (16×16, 48×48, 128×128)      |
 
 ## Privacy
 
 This extension:
+
 - ✅ Reads link `href` attributes to check clicked destinations
 - ✅ Sends aggregate counts plus a bounded DOM snapshot to your configured backend
 - ❌ Never sends cookies, passwords, or input/textarea form values
@@ -56,4 +57,5 @@ This extension:
 ## Warning Page Disclaimer
 
 The warning page includes a clear disclaimer that:
+
 > "This is an automated assessment based on URL and available page-structure signals. It may be incorrect. Legitimate sites can occasionally be flagged."

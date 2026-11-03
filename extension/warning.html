@@ -1,19 +1,41 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>fihhguard — stop</title><link rel="stylesheet" href="warning.css"></head>
-<body>
-  <main class="container" id="warning-container">
-    <div class="icon-area" id="icon-area" aria-hidden="true"></div>
-    <h1 class="headline" id="headline">wait. this link looks dangerous.</h1>
-    <span class="risk-badge" id="risk-badge">phishing</span>
-    <div class="url-box"><p class="url-label">destination</p><p class="url-text" id="dest-url">—</p></div>
-    <div class="prob-row"><span>phishing probability</span><span id="prob-value">—</span></div>
-    <div class="explanation-box" id="explanation-box"><p class="section-label">why fihh stopped you</p><p id="explanation-text"></p></div>
-    <ul class="warnings-list" id="warnings-list" hidden></ul>
-    <div class="error-box" id="error-box" hidden><p id="error-text"></p></div>
-    <p class="disclaimer"><strong>seriously:</strong> no detector is perfect, but do not enter passwords or payment details here unless you verify the address another way.</p>
-    <div class="actions"><button class="btn-back" id="btn-back">take me back to safety</button><button class="btn-continue" id="btn-continue">i understand the risk, continue</button></div>
-  </main>
-  <script src="warning.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>fihhguard — stop</title>
+    <link rel="stylesheet" href="warning.css" />
+  </head>
+  <body>
+    <main class="container" id="warning-container">
+      <div class="icon-area" id="icon-area" aria-hidden="true"></div>
+      <h1 class="headline" id="headline">wait. this link looks dangerous.</h1>
+      <span class="risk-badge" id="risk-badge">phishing</span>
+      <div class="url-box">
+        <p class="url-label">destination</p>
+        <p class="url-text" id="dest-url">—</p>
+      </div>
+      <div class="prob-row">
+        <span>phishing probability</span><span id="prob-value">—</span>
+      </div>
+      <div class="explanation-box" id="explanation-box">
+        <p class="section-label">why fihh stopped you</p>
+        <p id="explanation-text"></p>
+      </div>
+      <ul class="warnings-list" id="warnings-list" hidden></ul>
+      <div class="error-box" id="error-box" hidden><p id="error-text"></p></div>
+      <p class="disclaimer">
+        <strong>seriously:</strong> no detector is perfect, but do not enter
+        passwords or payment details here unless you verify the address another
+        way.
+      </p>
+      <div class="actions">
+        <button class="btn-back" id="btn-back">take me back to safety</button
+        ><button class="btn-continue" id="btn-continue">
+          i understand the risk, continue
+        </button>
+      </div>
+    </main>
+    <script src="warning.js"></script>
+  </body>
 </html>

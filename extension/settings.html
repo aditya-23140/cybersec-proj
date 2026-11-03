@@ -1,16 +1,135 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>fihhguard settings</title><link rel="stylesheet" href="popup.css"><style>body{width:auto;min-height:100vh;max-width:720px;margin:auto}.settings{display:grid;gap:18px;padding:28px 0}.setting{padding:18px;border:2px solid var(--ink);border-radius:18px;box-shadow:4px 4px 0 var(--ink)}.setting h2{font:900 24px var(--font-display);margin:0 0 6px}.setting p{color:var(--muted);font-size:13px}.choice-row{display:flex;gap:8px;flex-wrap:wrap}.choice-row label{border:2px solid var(--ink);border-radius:12px;padding:10px;cursor:pointer}.choice-row input{width:auto}.btn-save{min-height:44px;border:2px solid var(--ink);border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:900;padding:10px 18px}.btn-save *{color:inherit}.feedback{min-height:20px;font-weight:800}</style></head>
-<body>
-  <header class="header"><div class="header-title"><span class="header-icon">><))</span><span class="header-name">fihhguard settings</span></div></header>
-  <main class="settings">
-    <section class="setting"><h2>how fihh behaves</h2><p>auto-scan links as you click them, or keep it manual.</p><label><input id="auto-scan" type="checkbox" checked> auto-scan clicked links</label></section>
-    <section class="setting"><h2>sensitivity</h2><p>this changes how cautious the extension feels. the server still makes the verdict.</p><div class="choice-row"><label><input name="sensitivity" value="relaxed" type="radio"> relaxed</label><label><input name="sensitivity" value="balanced" type="radio" checked> balanced</label><label><input name="sensitivity" value="strict" type="radio"> strict</label></div></section>
-    <section class="setting"><h2>theme</h2><p>match your browser, or pick a side.</p><select id="theme-select"><option value="system">system</option><option value="light">light</option><option value="dark">dark</option></select></section>
-    <section class="setting"><h2>backend</h2><p>where your FihhGuard API is running.</p><input id="backend-url" type="url" placeholder="http://127.0.0.1:8000"></section>
-    <section class="setting"><h2>privacy, plainly</h2><p>the extension sends the clicked URL and, after a page loads, aggregate page signals plus a bounded DOM snapshot with form values removed. It does not send cookies, passwords, or textarea values.</p></section>
-    <div><button class="btn-save" id="btn-save">save settings</button> <a class="footer-link" href="onboarding.html">show me how it works</a><p class="feedback" id="feedback"></p></div>
-  </main>
-  <script src="settings.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>fihhguard settings</title>
+    <link rel="stylesheet" href="popup.css" />
+    <style>
+      body {
+        width: auto;
+        min-height: 100vh;
+        max-width: 720px;
+        margin: auto;
+      }
+      .settings {
+        display: grid;
+        gap: 18px;
+        padding: 28px 0;
+      }
+      .setting {
+        padding: 18px;
+        border: 2px solid var(--ink);
+        border-radius: 18px;
+        box-shadow: 4px 4px 0 var(--ink);
+      }
+      .setting h2 {
+        font: 900 24px var(--font-display);
+        margin: 0 0 6px;
+      }
+      .setting p {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .choice-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .choice-row label {
+        border: 2px solid var(--ink);
+        border-radius: 12px;
+        padding: 10px;
+        cursor: pointer;
+      }
+      .choice-row input {
+        width: auto;
+      }
+      .btn-save {
+        min-height: 44px;
+        border: 2px solid var(--ink);
+        border-radius: 12px;
+        background: var(--accent);
+        color: var(--on-accent);
+        font-weight: 900;
+        padding: 10px 18px;
+      }
+      .btn-save * {
+        color: inherit;
+      }
+      .feedback {
+        min-height: 20px;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-title">
+        <span class="header-icon">><))</span
+        ><span class="header-name">fihhguard settings</span>
+      </div>
+    </header>
+    <main class="settings">
+      <section class="setting">
+        <h2>how fihh behaves</h2>
+        <p>auto-scan links as you click them, or keep it manual.</p>
+        <label
+          ><input id="auto-scan" type="checkbox" checked /> auto-scan clicked
+          links</label
+        >
+      </section>
+      <section class="setting">
+        <h2>sensitivity</h2>
+        <p>
+          this changes how cautious the extension feels. the server still makes
+          the verdict.
+        </p>
+        <div class="choice-row">
+          <label
+            ><input name="sensitivity" value="relaxed" type="radio" />
+            relaxed</label
+          ><label
+            ><input name="sensitivity" value="balanced" type="radio" checked />
+            balanced</label
+          ><label
+            ><input name="sensitivity" value="strict" type="radio" />
+            strict</label
+          >
+        </div>
+      </section>
+      <section class="setting">
+        <h2>theme</h2>
+        <p>match your browser, or pick a side.</p>
+        <select id="theme-select">
+          <option value="system">system</option>
+          <option value="light">light</option>
+          <option value="dark">dark</option>
+        </select>
+      </section>
+      <section class="setting">
+        <h2>backend</h2>
+        <p>where your FihhGuard API is running.</p>
+        <input
+          id="backend-url"
+          type="url"
+          placeholder="http://127.0.0.1:8000"
+        />
+      </section>
+      <section class="setting">
+        <h2>privacy, plainly</h2>
+        <p>
+          the extension sends the clicked URL and, after a page loads, aggregate
+          page signals plus a bounded DOM snapshot with form values removed. It
+          does not send cookies, passwords, or textarea values.
+        </p>
+      </section>
+      <div>
+        <button class="btn-save" id="btn-save">save settings</button>
+        <a class="footer-link" href="onboarding.html">show me how it works</a>
+        <p class="feedback" id="feedback"></p>
+      </div>
+    </main>
+    <script src="settings.js"></script>
+  </body>
 </html>

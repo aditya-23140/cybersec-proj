@@ -32,5 +32,5 @@
   --ink: #F2F0EA;
   --muted: #A7A59D;
   --line: #26261F;
-  --sticker: 4px 4px 0 #000000;
+  --sticker: 4px 4px 0 var(--ink);
 }

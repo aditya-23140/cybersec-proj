@@ -1,32 +1,75 @@
-.wrapper { display: flex; flex-direction: column; min-height: 100vh; }
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
 
 .nav {
   background: var(--color-navy);
   color: var(--color-white);
   padding: 0 1.5rem;
-  position: sticky; top: 0; z-index: 100;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 .navInner {
-  max-width: 1200px; margin: 0 auto;
-  display: flex; align-items: center; gap: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   height: 60px;
 }
-.logo { font-size: 1.2rem; font-weight: 800; color: var(--color-white); margin-right: 1rem; white-space: nowrap; }
-.navLinks { display: flex; gap: 0.25rem; flex: 1; flex-wrap: wrap; }
+.logo {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--color-white);
+  margin-right: 1rem;
+  white-space: nowrap;
+}
+.navLinks {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+  flex-wrap: wrap;
+}
 .navLink {
-  color: rgba(255,255,255,0.75);
+  color: rgba(255, 255, 255, 0.75);
   padding: 0.4rem 0.7rem;
   border-radius: 6px;
-  font-size: 0.88rem; font-weight: 500;
+  font-size: 0.88rem;
+  font-weight: 500;
   transition: all 0.15s;
 }
-.navLink:hover, .active { color: var(--color-white); background: rgba(255,255,255,0.12); }
-.authArea { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
-.username { font-size: 0.85rem; color: rgba(255,255,255,0.8); white-space: nowrap; }
+.navLink:hover,
+.active {
+  color: var(--color-white);
+  background: rgba(255, 255, 255, 0.12);
+}
+.authArea {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.username {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}
 
-.main { flex: 1; max-width: 1200px; width: 100%; margin: 0 auto; padding: 2rem 1.5rem; }
+.main {
+  flex: 1;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
 .footer {
-  background: var(--color-navy-light); color: rgba(255,255,255,0.5);
-  text-align: center; padding: 1rem; font-size: 0.78rem;
+  background: var(--color-navy-light);
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.78rem;
 }
