@@ -9,7 +9,8 @@ A Chrome Manifest V3 extension that intercepts link clicks and checks URLs again
 - Shows a warning page for suspicious or dangerous URLs
 - Manual URL checker in popup
 - Configurable backend URL in settings
-- Sends aggregate page signals and a bounded, sanitized DOM snapshot after a page loads
+- Sends aggregate page signals (link, form, and iframe counts) after a page loads
+- Sanitized DOM snapshot upload is strictly opt-in via Settings (default: OFF)
 - Never reads cookies, credentials, form values, or page text off the device
 
 ## Installation
@@ -50,7 +51,8 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 This extension:
 
 - ✅ Reads link `href` attributes to check clicked destinations
-- ✅ Sends aggregate counts plus a bounded DOM snapshot to your configured backend
+- ✅ Computes local aggregate counts (link, form, and iframe counts)
+- ⚙️ Sanitized DOM upload is opt-in via Settings (default: OFF; sends null when disabled)
 - ❌ Never sends cookies, passwords, or input/textarea form values
 - ❌ Never sends data to any third-party service
 

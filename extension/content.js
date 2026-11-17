@@ -1,6 +1,8 @@
-// content.js — PhishGuard link click interceptor
-// IMPORTANT: This script only reads link href attributes.
-// It does NOT read page content, cookies, credentials, or any user data.
+// content.js — PhishGuard link click interceptor and page safety reporter
+// Intercepts clicked links to check destination safety before navigation.
+// On page load, computes privacy-preserving aggregate metrics (link counts, form counts).
+// DOM snapshot upload is strictly OPT-IN via extension settings (default OFF).
+// Never reads or sends cookies, passwords, or input/textarea values.
 
 (function () {
   if (window.__phishguardLoaded) return;
@@ -61,18 +63,20 @@
         .filter((word) => /verify|urgent|suspend|password|wallet|billing/.test(word)).length,
       has_favicon: Boolean(document.querySelector('link[rel~="icon"]')),
       page_is_https: window.location.protocol === 'https:',
-      page_html: sanitisedPageHtml(),
     };
 
-    chrome.storage.sync.get({ allowlist: [] }, (settings) => {
+    chrome.storage.sync.get({ allowlist: [], enableDomUpload: false }, (settings) => {
       const allowlisted = settings.allowlist.some((domain) =>
         pageHost === domain || pageHost.endsWith(`.${domain}`));
       if (privateHost || allowlisted) return;
+
+      const pageHtml = settings.enableDomUpload ? sanitisedPageHtml() : null;
+
       chrome.runtime.sendMessage({
-      type: 'PAGE_SIGNALS',
-      url: pageUrl,
-      pageSignals: { ...pageSignals, page_html: undefined },
-      pageHtml: pageSignals.page_html,
+        type: 'PAGE_SIGNALS',
+        url: pageUrl,
+        pageSignals: pageSignals,
+        pageHtml: pageHtml,
       }, (response) => {
         if (chrome.runtime.lastError) return;
         if (response?.risk === 'dangerous') showPageWarning(response.explanation);

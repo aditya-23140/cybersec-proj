@@ -6,6 +6,7 @@ const backendInput = document.getElementById("backend-url");
 const saveBtn = document.getElementById("btn-save");
 const feedback = document.getElementById("feedback");
 const autoScan = document.getElementById("auto-scan");
+const enableDomUpload = document.getElementById("enable-dom-upload");
 const themeSelect = document.getElementById("theme-select");
 
 // ── Load saved settings on open ───────────────────────────────────────────────
@@ -14,11 +15,13 @@ async function loadSettings() {
     const stored = await chrome.storage.sync.get({
       backendUrl: DEFAULT_BACKEND_URL,
       autoScan: true,
+      enableDomUpload: false,
       sensitivity: "balanced",
       theme: "system",
     });
     backendInput.value = stored.backendUrl || DEFAULT_BACKEND_URL;
     autoScan.checked = stored.autoScan !== false;
+    if (enableDomUpload) enableDomUpload.checked = stored.enableDomUpload === true;
     const sensitivity = document.querySelector(
       `input[name="sensitivity"][value="${stored.sensitivity}"]`,
     );
@@ -55,6 +58,7 @@ saveBtn.addEventListener("click", async () => {
     await chrome.storage.sync.set({
       backendUrl: value,
       autoScan: autoScan.checked,
+      enableDomUpload: enableDomUpload ? enableDomUpload.checked : false,
       sensitivity:
         document.querySelector('input[name="sensitivity"]:checked')?.value ||
         "balanced",
