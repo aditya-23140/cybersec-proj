@@ -79,3 +79,32 @@ def test_short_password_rejected(client):
         "password": "abc",
     })
     assert resp.status_code == 422
+
+
+def test_jwt_secret_validation():
+    """Missing or short JWT_SECRET_KEY must raise a clear ValueError on startup."""
+    import importlib
+    import os
+    from unittest.mock import patch
+    import config
+
+    # 1. Test missing secret
+    with patch.dict(os.environ, {"JWT_SECRET_KEY": ""}, clear=False):
+        with pytest.raises(ValueError, match="at least 32 characters"):
+            importlib.reload(config)
+
+    # 2. Test short secret (< 32 chars)
+    with patch.dict(os.environ, {"JWT_SECRET_KEY": "too-short-key"}, clear=False):
+        with pytest.raises(ValueError, match="at least 32 characters"):
+            importlib.reload(config)
+
+    # 3. Test valid secret (>= 32 chars)
+    valid_key = "a" * 32
+    with patch.dict(os.environ, {"JWT_SECRET_KEY": valid_key}, clear=False):
+        importlib.reload(config)
+        assert config.JWT_SECRET_KEY == valid_key
+
+    # Restore test configuration
+    with patch.dict(os.environ, {"JWT_SECRET_KEY": "test-secret-key-not-for-production-use-32chars"}, clear=False):
+        importlib.reload(config)
+

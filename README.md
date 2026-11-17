@@ -93,8 +93,10 @@ cp .env.example .env
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Set `JWT_SECRET_KEY` in `.env` to a stable, long random value. Tokens issued
-before changing this value are invalid and require signing in again.
+Set `JWT_SECRET_KEY` in `.env` to a strong random value (at least 32 characters, required).
+The server will refuse to start if it is missing or too short. Generate one using:
+`python -c "import secrets; print(secrets.token_hex(32))"`. Tokens issued before
+changing this value are invalid and require signing in again.
 
 **On first start:**
 - Creates `phishing.db` with full schema

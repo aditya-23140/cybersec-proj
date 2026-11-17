@@ -44,7 +44,13 @@ DATABASE_PATH: str = os.getenv("DATABASE_PATH", "phishing.db")
 # --------------------------------------------------------------------------- #
 # JWT
 # --------------------------------------------------------------------------- #
-JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", secrets.token_hex(32))
+_raw_jwt_secret = os.getenv("JWT_SECRET_KEY", "").strip()
+if not _raw_jwt_secret or len(_raw_jwt_secret) < 32:
+    raise ValueError(
+        "JWT_SECRET_KEY environment variable is required and must be at least 32 characters long. "
+        "Generate one using: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+JWT_SECRET_KEY: str = _raw_jwt_secret
 JWT_ALGORITHM: str = "HS256"
 JWT_EXPIRY_HOURS: int = 24
 
