@@ -23,7 +23,6 @@ from urllib.parse import urlparse
 # Ensure local packages directory is accessible for joblib, xgboost, scikit-learn
 _CANDIDATE_PKGS = [
     Path(__file__).resolve().parents[3] / ".pkgs",
-    Path("/home/immortal_soul/.gemini/antigravity-cli/worktrees/93ae7424-d27f-48fd-8e0f-d7dcce0d6b35/swarm-phase3-training-eefa34ba/.pkgs"),
 ]
 for _pkg in _CANDIDATE_PKGS:
     if _pkg.exists() and str(_pkg) not in sys.path:

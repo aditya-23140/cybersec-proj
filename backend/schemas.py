@@ -219,11 +219,6 @@ class ForumReplyResponse(BaseModel):
     created_at: str
 
 
-class ForumPostDetail(BaseModel):
-    post: ForumPostResponse
-    replies: list[ForumReplyResponse]
-
-
 # --------------------------------------------------------------------------- #
 # Stats
 # --------------------------------------------------------------------------- #

@@ -17,28 +17,27 @@ Specifically:
 - **Real Database Persistence:** The backend connects to an actual SQLite relational database (`database.py`, `models.py`) managing users, hashed passwords, scans, allowlists, blocklists, and forum discussions. No fake or static responses are returned for history or statistics.
 - **Real Extension Hooking:** The Chrome Manifest V3 extension intercepts real DOM anchor click events via an isolated content script (`content.js`), communicates asynchronously with a background service worker (`background.js`), queries the shared backend API via HTTP `fetch`, and aborts/redirects navigation to an interstitial safety warning page (`warning.html`) when risk is detected.
 - **Real Cryptography & Auth:** User authentication uses real SHA-256 bcrypt password hashing with passlib and cryptographically signed HMAC-SHA256 JSON Web Tokens (JWT).
-- **ML Training Pipeline:** The training pipeline (`ml/src/train.py`) executes genuine XGBoost tree construction with cross-validated hyperparameter tuning and threshold optimization.
-  - *Data Source Configuration:* The training pipeline is written to fetch the real 235,000+ URL **PhiUSIIL Phishing URL Dataset** (UCI Machine Learning Repository).
-  - *Air-Gap / Sandbox Fallback:* To guarantee zero-failure reproducibility in offline, restricted, or sandboxed CI/CD environments without external internet connectivity, an automated fallback (`data_loader.py`) generates a reproducible, structurally realistic dataset so the full training, tree optimization, metrics computation, and UBJSON serialization can still be executed end-to-end without crashing.
+- **ML Training Pipeline:** The v2 training pipeline (`ml/v2/training/cli.py`) executes genuine gradient-boosted tree construction with domain-grouped splits, isotonic calibration, and threshold optimization.
+  - *Data Source Configuration:* The training pipeline supports PhreshPhish, Tranco/Common Crawl hard negatives, and out-of-time URLhaus evaluation splits.
+  - *Air-Gap / Sandbox Fallback:* Parquet stubs and reproducible generator scripts (`ml/v2/data/scripts/`) allow end-to-end testing, gate verification, and bundle serialization in offline environments.
 
 ---
 
 ## 2. Inventory of Implemented Components and Their Exact Functions
 
-### A. Machine Learning Pipeline (`ml/`)
+### A. Machine Learning Pipeline (`ml/v2/`)
 
 | File | Purpose and Implemented Logic |
 | :--- | :--- |
-| [`ml/config.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/config.py) | Central configuration: feature names in exact canonical order, brand keywords dictionary, hyperparameter search grids, and dataset URLs. |
-| [`ml/src/feature_extractor.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/src/feature_extractor.py) | Implements all 8 features from the Misiek & Hyla (2026) paper: `length_url`, `qty_hyphens_path`, `has_brand_keyword`, `subdomain_count`, `qty_nameservers`, `qty_dots_url`, `is_spf_domain`, `time_domain_activation`. Includes safe fallbacks for DNS/network features when offline. |
-| [`ml/src/data_loader.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/src/data_loader.py) | Handles dataset acquisition. Downloads the UCI PhiUSIIL dataset, extracts the zip, normalizes column names, and provides synthetic generation for offline mode. |
-| [`ml/src/data_validation.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/src/data_validation.py) | Sanitizes training data: checks URL schemes, drops invalid URLs, identifies exact duplicates, and removes conflicting labels. |
-| [`ml/src/preprocessing.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/src/preprocessing.py) | Transforms raw URL lists into NumPy feature matrices; splits into stratified Train (70%), Validation (15%), and Test (15%) splits. |
-| [`ml/src/train.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/src/train.py) | Full training workflow: runs grid search over `max_depth`, `learning_rate`, `n_estimators`, selects optimal decision thresholds on validation data, and persists artifacts. |
-| [`ml/src/evaluate.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/src/evaluate.py) | Computes real metrics on test sets: Accuracy, Precision, Recall, F1 score, False Positive Rate (FPR), ROC-AUC, and Confusion Matrix. Never fakes numbers. |
-| [`ml/src/model_registry.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/src/model_registry.py) | Standardized saving and loading of binary model (`model.ubj`), `feature_schema.json`, `threshold_config.json`, and training `metadata.json`. |
-| [`ml/src/predict.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/src/predict.py) | Production `PhishingPredictor` class used by the backend. Performs feature extraction, runs tree inference, classifies risk level (`safe`, `suspicious`, `dangerous`), and generates human-readable explanations based on extracted features. |
-| [`ml/tests/`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/tests) | 20+ unit tests covering feature extractors, schema invariants, training roundtrips, and prediction error handling. |
+| [`ml/v2/features/extractor.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/v2/features/extractor.py) | Feature extraction across lexical, brand impersonation, content structure, and redirect signals. |
+| [`ml/v2/training/dataset.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/v2/training/dataset.py) | Dataset loading, parquet parsing, column normalization, and validation. |
+| [`ml/v2/training/splitter.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/v2/training/splitter.py) | Domain-grouped, time-aware splitting to prevent cross-split data leakage. |
+| [`ml/v2/training/train.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/v2/training/train.py) | Model training workflow with LightGBM, isotonic calibration, and quality gate checks. |
+| [`ml/v2/training/evaluate.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/v2/training/evaluate.py) | Metrics evaluation across validation, in-distribution test, and out-of-time splits. |
+| [`ml/v2/training/bundle.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/v2/training/bundle.py) | Bundle persistence: packages model, calibrator, and schema into `bundle.pkl.gz`. |
+| [`ml/v2/serving/detector.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/v2/serving/detector.py) | Production detector class used by backend predictor for fast feature extraction and inference. |
+| [`ml/v2/training/cli.py`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/v2/training/cli.py) | Unified command-line interface for train, evaluate, and predict commands. |
+| [`ml/v2/tests/`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/v2/tests) | Test suites for feature extractors, dataset handling, and gate regression. |
 
 ---
 
@@ -82,15 +81,15 @@ Specifically:
 
 | File | Purpose and Implemented Logic |
 | :--- | :--- |
-| [`frontend/pages/index.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/pages/index.js) | Main landing page & live URL scanner. Real-time form connected to `/api/v1/predict` displaying probability meter, risk classification, and evidence explanation. |
-| [`frontend/pages/dashboard.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/pages/dashboard.js) | Analytics dashboard powered by Recharts: renders threat distributions, total scans, and recent activity directly from `/api/v1/stats`. |
-| [`frontend/pages/history.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/pages/history.js) | User scan log table with timestamps, probabilities, risk badges, and pagination. |
-| [`frontend/pages/lists.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/pages/lists.js) | Manage personal domain allowlist and blocklist with instant add/delete. |
-| [`frontend/pages/forum/`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/pages/forum) | Threat intelligence discussion board: view post index, read thread details, reply to threats, and create new posts. |
-| [`frontend/pages/education.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/pages/education.js) | Cybersecurity awareness guide explaining common URL obfuscation techniques (typosquatting, open redirects, homoglyphs, brand spoofing). |
-| [`frontend/pages/login.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/pages/login.js) / [`register.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/pages/register.js) | User authentication forms with client-side validation and JWT session handling. |
+| [`frontend/app/page.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/app/page.js) | Main landing page & live URL scanner. Real-time form connected to `/api/v1/predict` displaying probability meter, risk classification, and evidence explanation. |
+| [`frontend/app/dashboard/page.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/app/dashboard/page.js) | Analytics dashboard: renders threat distributions, total scans, and recent activity directly from `/api/v1/stats`. |
+| [`frontend/app/history/page.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/app/history/page.js) | User scan log table with timestamps, probabilities, risk badges, and pagination. |
+| [`frontend/app/lists/page.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/app/lists/page.js) | Manage personal domain allowlist and blocklist with instant add/delete. |
+| [`frontend/app/forum/`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/app/forum) | Threat intelligence discussion board: view post index, read thread details, reply to threats, and create new posts. |
+| [`frontend/app/education/page.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/app/education/page.js) | Cybersecurity awareness guide explaining common URL obfuscation techniques (typosquatting, open redirects, homoglyphs, brand spoofing). |
+| [`frontend/app/login/page.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/app/login/page.js) / [`register/page.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/app/register/page.js) | User authentication forms with client-side validation and JWT session handling. |
 | [`frontend/lib/api.js`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/lib/api.js) | Centralized Axios HTTP client with automatic `Authorization: Bearer <token>` injection and unified error normalization. |
-| [`frontend/components/`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/components) | UI layout, navigation bar, footer, `RiskBadge` (color-coded safe/suspicious/dangerous badges), and `ScanResult` breakdown card. |
+| [`frontend/app/components/`](file:///home/immortal_soul/immortal_soul/Coding/cybersec-proj/frontend/app/components) | UI layout and shared components (`Shell.js`, `Ui.js`). |
 
 ---
 

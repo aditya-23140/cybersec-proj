@@ -56,23 +56,6 @@ CORS_ORIGINS: list[str] = os.getenv(
 ).split(",")
 
 # --------------------------------------------------------------------------- #
-# Feature flags
-# --------------------------------------------------------------------------- #
-ENABLE_DNS_ENRICHMENT: bool = (
-    os.getenv("ENABLE_DNS_ENRICHMENT", "false").lower() == "true"
-)
-ENABLE_NETWORK_ENRICHMENT: bool = (
-    os.getenv("ENABLE_NETWORK_ENRICHMENT", "false").lower() == "true"
-)
-ENRICHMENT_TIMEOUT_SECONDS: float = float(
-    os.getenv("ENRICHMENT_TIMEOUT_SECONDS", "5")
-)
-URLHAUS_ENABLED: bool = os.getenv("URLHAUS_ENABLED", "false").lower() == "true"
-URLHAUS_AUTH_KEY: str = os.getenv("URLHAUS_AUTH_KEY", "")
-URLHAUS_LOOKUP_URL: str = "https://urlhaus-api.abuse.ch/v1/url/"
-URLHAUS_HOST_LOOKUP_URL: str = "https://urlhaus-api.abuse.ch/v1/host/"
-
-# --------------------------------------------------------------------------- #
 # Server-side page fetch (hybrid scanning)
 # --------------------------------------------------------------------------- #
 ENABLE_PAGE_FETCH: bool = os.getenv("ENABLE_PAGE_FETCH", "true").lower() == "true"

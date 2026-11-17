@@ -10,24 +10,21 @@
 Follow these exact steps when you are ready to resume:
 
 ### Step 1: Run ML Unit Tests
-Verify feature extraction (all 8 paper features), data preprocessing, and model registry logic:
+Verify feature extraction, data preprocessing, and bundle logic:
 ```bash
-cd /home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml
-python3 -m pytest tests/ -v
+pytest ml/v2/tests/ ml/v2/features/tests/ ml/v2/training/tests/ -v
 ```
 
-### Step 2: Train the XGBoost Model Artifact
-Train the model. If you have internet access, it will attempt to download the UCI PhiUSIIL dataset; otherwise, use `--synthetic` for offline reproducible training:
+### Step 2: Train the Model Artifact
+Train the v2 model bundle or evaluate gates:
 ```bash
-cd /home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml
+# Train model bundle
+python -m ml.v2.training.cli train
 
-# Option A: Online with live dataset download
-python3 -m src.train --seed 42
-
-# Option B: Offline / Sandboxed mode with synthetic dataset (fast, 5,000 URLs)
-python3 -m src.train --synthetic --seed 42
+# Or evaluate against quality gates
+python -m ml.v2.training.cli evaluate
 ```
-*Verification:* Ensure `/home/immortal_soul/immortal_soul/Coding/cybersec-proj/ml/artifacts/model.ubj` and `threshold_config.json` exist and are non-empty.
+*Verification:* Ensure `ml/v2/artifacts/bundle.pkl.gz` exists and is non-empty.
 
 ### Step 3: Run Backend Unit & Integration Tests
 Verify API routes, risk policy, database persistence, and authentication:
