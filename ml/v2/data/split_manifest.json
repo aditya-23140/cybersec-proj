@@ -1,0 +1,28 @@
+{
+  "train": {
+    "n_rows": 250,
+    "n_legit": 200,
+    "n_phishing": 50,
+    "n_domains": 180,
+    "date_min": "2023-01-01",
+    "date_max": "2024-06-30"
+  },
+  "val": {
+    "n_rows": 50,
+    "n_legit": 30,
+    "n_phishing": 20,
+    "n_domains": 45,
+    "date_min": "2024-07-01",
+    "date_max": "2024-09-30"
+  },
+  "test": {
+    "n_rows": 30,
+    "n_legit": 20,
+    "n_phishing": 10,
+    "n_domains": 28,
+    "date_min": "2024-10-01",
+    "date_max": "2024-12-31"
+  },
+  "phishing_prior_pct": 24.24,
+  "note": "sample_weight for training: positives scaled to reflect realistic browsing prior (>=99% legit). Do NOT oversample phishing class."
+}

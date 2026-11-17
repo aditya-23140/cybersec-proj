@@ -18,9 +18,23 @@ except ImportError:
 # --------------------------------------------------------------------------- #
 # ML / model
 # --------------------------------------------------------------------------- #
-ML_ARTIFACTS_DIR: str = os.getenv("ML_ARTIFACTS_DIR", "../ml/artifacts")
-HYBRID_MODEL_FILE: str = os.getenv("HYBRID_MODEL_FILE", "hybrid.joblib")
-HYBRID_FETCH_ENABLED: bool = os.getenv("HYBRID_FETCH_ENABLED", "true").lower() == "true"
+def _resolve_bundle_path() -> str:
+    env_path = os.getenv("ML_BUNDLE_PATH")
+    if env_path and Path(env_path).exists():
+        return env_path
+    repo_root = Path(__file__).resolve().parents[1]
+    candidates = [
+        repo_root / "ml" / "v2" / "artifacts" / "bundle.pkl.gz",
+        repo_root / "ml" / "bundle.pkl.gz",
+        repo_root / "ml" / "artifacts" / "bundle.pkl.gz",
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return str(candidates[0])
+
+ML_BUNDLE_PATH: str = _resolve_bundle_path()
+ALLOW_UNGATED_MODEL: bool = os.getenv("ALLOW_UNGATED_MODEL", "true").lower() == "true"
 
 # --------------------------------------------------------------------------- #
 # Database
@@ -48,7 +62,7 @@ ENABLE_DNS_ENRICHMENT: bool = (
     os.getenv("ENABLE_DNS_ENRICHMENT", "false").lower() == "true"
 )
 ENABLE_NETWORK_ENRICHMENT: bool = (
-    os.getenv("ENABLE_NETWORK_ENRICHMENT", "true").lower() == "true"
+    os.getenv("ENABLE_NETWORK_ENRICHMENT", "false").lower() == "true"
 )
 ENRICHMENT_TIMEOUT_SECONDS: float = float(
     os.getenv("ENRICHMENT_TIMEOUT_SECONDS", "5")
@@ -59,6 +73,13 @@ URLHAUS_LOOKUP_URL: str = "https://urlhaus-api.abuse.ch/v1/url/"
 URLHAUS_HOST_LOOKUP_URL: str = "https://urlhaus-api.abuse.ch/v1/host/"
 
 # --------------------------------------------------------------------------- #
+# Server-side page fetch (hybrid scanning)
+# --------------------------------------------------------------------------- #
+ENABLE_PAGE_FETCH: bool = os.getenv("ENABLE_PAGE_FETCH", "true").lower() == "true"
+PAGE_FETCH_TIMEOUT: float = float(os.getenv("PAGE_FETCH_TIMEOUT", "5.0"))
+PAGE_FETCH_MAX_BYTES: int = int(os.getenv("PAGE_FETCH_MAX_BYTES", "300000"))
+
+# --------------------------------------------------------------------------- #
 # Model metadata
 # --------------------------------------------------------------------------- #
-MODEL_VERSION: str = "1.1.0"
+MODEL_VERSION: str = "2.0.0-dev"

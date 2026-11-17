@@ -61,14 +61,19 @@ def _get_thresholds() -> dict:
 def probability_to_risk_level(probability: float, thresholds: dict | None = None) -> str:
     """Convert a phishing probability to a calibrated risk-level string."""
     selected = thresholds or _get_thresholds()
-    safe_threshold = selected.get("safe", 0.35)
-    suspicious_threshold = selected.get("suspicious", 0.70)
+    # Support both {"phishing": 0.55, "suspicious": 0.25} and {"dangerous": 0.7, "safe": 0.35}
+    if "phishing" in selected and "suspicious" in selected:
+        t_phish = float(selected["phishing"])
+        t_susp = float(selected["suspicious"])
+    else:
+        t_phish = float(selected.get("dangerous", selected.get("suspicious", 0.70)))
+        t_susp = float(selected.get("safe", 0.35))
 
-    if probability < safe_threshold:
-        return "safe"
-    if probability < suspicious_threshold:
+    if probability >= t_phish:
+        return "dangerous"
+    if probability >= t_susp:
         return "suspicious"
-    return "dangerous"
+    return "safe"
 
 
 def _live_verification_status(url: str, network: dict) -> tuple[bool, list[str]]:
@@ -145,214 +150,45 @@ def apply_policy(
     allowlist_domains: list[str],
 ) -> dict:
     """
-    Apply blocklist/allowlist rules and calibrated risk aggregation to a raw model prediction.
+    Pure model-based policy application.
+    Uses only the trained ML model's calibrated probability and thresholds for prediction.
+    Personal allow/block lists are respected for logged-in users; all 3rd-party site lookups are removed.
     """
     warnings: list[str] = list(raw_prediction.get("warnings", []))
 
-    # ------------------------------------------------------------------ #
-    # 1. Blocklist takes absolute precedence
-    # ------------------------------------------------------------------ #
+    # 1. User's personal blocklist in local database (logged-in user override)
     if check_domain_in_list(url, blocklist_domains):
         return {
             "prediction": "phishing",
             "risk_level": "dangerous",
-            "phishing_probability": max(float(raw_prediction.get("phishing_probability", 1.0)), 0.99),
+            "phishing_probability": 1.0,
             "warnings": [
-                "⛔ Domain is on your personal blocklist. "
-                "This result overrides the model prediction."
+                "⛔ Domain is on your personal blocklist."
             ],
             "source": "blocklist",
             "decided_by": "personal_blocklist",
             "verification_status": "blocked",
         }
 
-    signals = raw_prediction.get("high_confidence_signals", {})
-    network = raw_prediction.get("network_signals", {})
-    official_domain = bool(signals.get("known_official_domain"))
-    live_verified, verification_reasons = _live_verification_status(url, network)
-    verification_status = _verification_status(url, network, official_domain)
-
-    probability = float(raw_prediction.get("phishing_probability", 0.0))
-
-    # ------------------------------------------------------------------ #
-    # 2. Verified threat-feed reputation match (URLhaus)
-    # ------------------------------------------------------------------ #
-    reputation = network.get("reputation", {})
-    if reputation.get("reputation_hit"):
-        return {
-            "prediction": "phishing",
-            "risk_level": "dangerous",
-            "phishing_probability": 1.0,
-            "warnings": [
-                f"⚠ The configured {reputation.get('reputation_provider', 'reputation')} "
-                "provider has reported this URL."
-            ],
-            "source": "reputation",
-            "decided_by": "threat_intel",
-            "verification_status": "flagged_by_threat_intel",
-        }
-
-    # The detector's exact-root trust list is limited to the top 10,000
-    # registered domains. It never trusts arbitrary subdomains.
-    if raw_prediction.get("trusted_domain"):
-        return {
-            "prediction": "benign",
-            "risk_level": "safe",
-            "phishing_probability": min(probability, 0.02),
-            "warnings": [
-                "The exact registered domain is in the configured top-10k "
-                "allowlist; subdomains and page content are not covered by this trust."
-            ],
-            "source": "top10k_allowlist",
-            "decided_by": "top10k_allowlist",
-            "verification_status": verification_status,
-        }
-
-    # ------------------------------------------------------------------ #
-    # 3. Confirmed page-level credential harvesting
-    # ------------------------------------------------------------------ #
-    page_signals = raw_prediction.get("page_signals", {})
-    if (
-        page_signals.get("has_password_field")
-        and page_signals.get("external_form_count", 0) > 0
-    ):
-        return {
-            "prediction": "phishing",
-            "risk_level": "dangerous",
-            "phishing_probability": max(probability, 0.95),
-            "warnings": [
-                "⚠ The inspected page contains a password field submitting to an external domain, "
-                "a confirmed credential-harvesting pattern."
-            ],
-            "source": "page_content_signal",
-            "verification_status": verification_status,
-        }
-
-    http_signals = network.get("http", {})
-    if (
-        http_signals.get("has_password_field")
-        and http_signals.get("external_form_count", 0) > 0
-    ):
-        return {
-            "prediction": "phishing",
-            "risk_level": "dangerous",
-            "phishing_probability": max(probability, 0.95),
-            "warnings": [
-                "⚠ The fetched page contains a password field submitting to an "
-                "external domain, a credential-harvesting pattern."
-            ],
-            "source": "fetched_page_signal",
-            "verification_status": verification_status,
-        }
-
-    if (
-        http_signals.get("cross_domain_redirect")
-        and http_signals.get("suspicious_text_hits", 0) > 0
-    ):
-        return {
-            "prediction": "phishing",
-            "risk_level": "dangerous",
-            "phishing_probability": max(probability, 0.9),
-            "warnings": [
-                "⚠ The URL redirected to another domain and the fetched page "
-                "contained suspicious account or urgency language."
-            ],
-            "source": "fetched_page_signal",
-            "verification_status": verification_status,
-        }
-
-    # ------------------------------------------------------------------ #
-    # 4. High-confidence brand impersonation / lookalike
-    # ------------------------------------------------------------------ #
-    if signals.get("brand_lookalike") or signals.get("brand_impersonation"):
-        impersonated = signals.get("impersonated_brands", [])
-        brand_text = f" ({', '.join(impersonated)})" if impersonated else ""
-        return {
-            "prediction": "phishing",
-            "risk_level": "dangerous",
-            "phishing_probability": max(probability, 0.98),
-            "warnings": [
-                f"⚠ The hostname appears to impersonate a known brand on an unrelated domain{brand_text}. "
-                "This high-confidence domain signal overrides the model score."
-            ],
-            "source": "high_confidence_domain_signal",
-            "verification_status": verification_status,
-        }
-
-    # ------------------------------------------------------------------ #
-    # 5. Negative network signals context
-    # ------------------------------------------------------------------ #
-    whois = network.get("whois", {})
-    tls = network.get("tls", {})
-    network_warnings: list[str] = []
-
-    if whois.get("domain_age_days") is not None and whois["domain_age_days"] < 14:
-        network_warnings.append("The domain was registered less than 14 days ago.")
-
-    if (
-        urlparse(url).scheme.lower() == "https"
-        and tls.get("certificate_checked", False)
-        and not tls.get("certificate_valid", False)
-    ):
-        network_warnings.append("The HTTPS certificate is invalid or does not match the hostname.")
-
-    if network_warnings and probability >= 0.7 and not official_domain:
-        return {
-            "prediction": "phishing",
-            "risk_level": "dangerous",
-            "phishing_probability": probability,
-            "warnings": network_warnings,
-            "source": "network_signal",
-            "verification_status": verification_status,
-        }
-
-    # ------------------------------------------------------------------ #
-    # 6. Official verified brand domain
-    # ------------------------------------------------------------------ #
-    if official_domain and _official_domain_verified(url, network):
-        return {
-            "prediction": "benign",
-            "risk_level": "safe",
-            "phishing_probability": min(probability, 0.02),
-            "warnings": [
-                "✓ The registrable domain matches a known official brand domain. "
-                "The domain and HTTPS connection were verified; page content could "
-                "not be confirmed if the fetch timed out."
-            ],
-            "source": "official_domain_registry",
-            "verification_status": verification_status,
-        }
-
-    # ------------------------------------------------------------------ #
-    # 7. Incomplete verification for safe models
-    # ------------------------------------------------------------------ #
-    if network.get("enrichment_enabled") and not live_verified:
-        return {
-            "prediction": "benign",
-            "risk_level": "suspicious",
-            "phishing_probability": max(probability, 0.3),
-            "warnings": [
-                "⚠ The model score is low, but the website could not be fully "
-                "verified. " + "; ".join(verification_reasons) + "."
-            ],
-            "source": "verification_incomplete",
-            "verification_status": verification_status,
-        }
-
-    # ------------------------------------------------------------------ #
-    # 8. Model-based classification & calibrated risk level
-    # ------------------------------------------------------------------ #
-    risk_level = probability_to_risk_level(probability, raw_prediction.get("risk_thresholds"))
-    prediction = "phishing" if risk_level == "dangerous" else "benign"
-
-    # ------------------------------------------------------------------ #
-    # 9. User personal allowlist
-    # ------------------------------------------------------------------ #
+    # 2. User's personal allowlist in local database (logged-in user override)
     if check_domain_in_list(url, allowlist_domains):
-        warnings.append(
-            "✅ Domain is on your personal allowlist. "
-            "The model prediction is shown but you have marked this domain as trusted."
-        )
+        return {
+            "prediction": "benign",
+            "risk_level": "safe",
+            "phishing_probability": 0.0,
+            "warnings": [
+                "✅ Domain is on your personal allowlist."
+            ],
+            "source": "allowlist",
+            "decided_by": "personal_allowlist",
+            "verification_status": "trusted",
+        }
+
+    # 3. Pure Model-Based Verdict
+    probability = float(raw_prediction.get("phishing_probability", 0.0))
+    thresholds = raw_prediction.get("risk_thresholds")
+    risk_level = probability_to_risk_level(probability, thresholds)
+    prediction = "phishing" if risk_level == "dangerous" else "benign"
 
     return {
         "prediction": prediction,
@@ -361,5 +197,5 @@ def apply_policy(
         "warnings": warnings,
         "source": "model",
         "decided_by": "model",
-        "verification_status": verification_status,
+        "verification_status": "model_evaluated",
     }

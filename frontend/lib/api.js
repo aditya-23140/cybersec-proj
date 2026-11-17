@@ -15,6 +15,22 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error.response?.status === 401 &&
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/login"
+    ) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("username");
+      window.location.assign("/login");
+    }
+    return Promise.reject(error);
+  },
+);
+
 // ── URL Prediction ────────────────────────────────────────────────────────────
 export const checkUrl = (url) => api.post("/predict", { url });
 export const getHealth = () => api.get("/health");

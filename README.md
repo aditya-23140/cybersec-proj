@@ -96,14 +96,37 @@ the backend does not persist that snapshot.
 cd ml
 python phishing_hybrid.py train \
   --data data/phiusiil.csv,URL,label,0 \
+  --data data/hybrid_snapshot_dataset/benign.csv,url,label,1 \
+  --data data/hybrid_snapshot_dataset/phishing.csv,url,label,1 \
+  --data data/real_legitimate_paths_train.csv,url,label,1 \
   --top-domains data/tranco/top-1m.csv \
   --top-n 10000 \
+  --rank-n 1000000 \
+  --n-iter 25 \
   --out artifacts/hybrid.joblib
 ```
 
 Without a DOM snapshot, content features are missing and the model operates in
 URL-only mode. To enable page-content features during training, crawl labelled
 URLs first and pass the snapshot directory with `--snapshots`.
+
+The snapshot guard (5,000 successful snapshots per class and 20% coverage) is
+enforced only when `--snapshots` is supplied. URL-only training records
+`content_trained=false`; the API reports `model_mode: "url-only"` and
+`content_ignored: true`.
+
+Daily collection must run in a dedicated isolated VM/container:
+
+```bash
+python data_pipeline.py collect-daily \
+  --snapshots data/hybrid_snapshot_dataset \
+  --tranco data/tranco/top-1m.csv --isolated
+```
+
+Feed credentials are read from `OPENPHISH_API_KEY`, `PHISHTANK_APP_KEY`, and
+`URLHAUS_API_KEY` (with optional `*_FEED_URL` overrides). The collector writes
+`snapshot_manifest.csv` with source and fetch time, filters URLhaus to phishing
+or credential-harvesting tags, and prints coverage/dead-on-arrival metrics.
 
 ---
 
@@ -115,12 +138,15 @@ cd backend
 # Install dependencies
 pip install fastapi uvicorn "python-jose[cryptography]" "passlib[bcrypt]" pydantic pytest httpx pytest-asyncio
 
-# Copy and edit environment (optional — defaults work for local dev)
+# Copy and edit environment
 cp .env.example .env
 
 # Start the server (from backend/ directory)
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+Set `JWT_SECRET_KEY` in `.env` to a stable, long random value. Tokens issued
+before changing this value are invalid and require signing in again.
 
 **On first start:**
 - Creates `phishing.db` with full schema
