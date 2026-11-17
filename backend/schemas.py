@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # --------------------------------------------------------------------------- #
 
 class PredictRequest(BaseModel):
-    url: str = Field(..., min_length=1, description="URL to analyse")
+    url: str = Field(..., min_length=1, max_length=2048, description="URL to analyse")
     page_signals: "PageSignals | None" = None
     page_html: str | None = Field(
         None,

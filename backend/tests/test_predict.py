@@ -1,6 +1,7 @@
 """
 backend/tests/test_predict.py
 """
+import pytest
 def test_health_returns_200(client):
     resp = client.get("/api/v1/health")
     assert resp.status_code == 200
@@ -48,3 +49,17 @@ def test_stats_returns_zero_on_empty_db(client):
     data = resp.json()
     assert data["total_scans"] == 0
     assert data["benign_count"] == 0
+
+
+def test_predict_url_length_limit(client):
+    """URLs exceeding 2048 characters must be rejected with 422."""
+    from pydantic import ValidationError
+    from schemas import PredictRequest
+
+    long_url = "https://example.com/" + "a" * 2050
+    with pytest.raises(ValidationError):
+        PredictRequest(url=long_url)
+
+    resp = client.post("/api/v1/predict", json={"url": long_url})
+    assert resp.status_code == 422
+
