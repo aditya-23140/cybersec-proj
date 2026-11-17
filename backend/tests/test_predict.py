@@ -40,6 +40,9 @@ def test_predict_model_unavailable_returns_503(client):
 
 
 def test_stats_returns_zero_on_empty_db(client):
+    from database import get_db
+    with get_db() as conn:
+        conn.execute("DELETE FROM scans")
     resp = client.get("/api/v1/stats")
     assert resp.status_code == 200
     data = resp.json()

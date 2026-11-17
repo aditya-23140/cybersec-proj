@@ -1,0 +1,340 @@
+{
+  "version": "2.0.0-dev",
+  "features": [
+    {
+      "name": "url_length",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "hostname_length",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "path_length",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "query_length",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "fragment_length",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "url_entropy",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "hostname_entropy",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "path_entropy",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "digit_ratio_url",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "letter_ratio_url",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "special_char_count_url",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "subdomain_depth",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "tld_risk_score",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "has_ip_host",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "has_userinfo",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "has_punycode",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "idn_homograph_score",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "shortener_flag",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "shared_hosting_flag",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "qty_dots_url",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "qty_hyphens_url",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "qty_at_url",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "path_token_count",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "path_depth",
+      "group": "url_lexical",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "brand_edit_distance_min",
+      "group": "brand",
+      "missing_fill": 1.0
+    },
+    {
+      "name": "brand_homoglyph_score",
+      "group": "brand",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "brand_keyword_in_subdomain",
+      "group": "brand",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "brand_keyword_in_path",
+      "group": "brand",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "page_claimed_brand_mismatch",
+      "group": "brand",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "known_brand_in_title",
+      "group": "brand",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "known_brand_in_og",
+      "group": "brand",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "registered_domain_matches_brand",
+      "group": "brand",
+      "missing_fill": 0.0
+    },
+    {
+      "name": "domain_age_days",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "registrar_risk_score",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "mx_present",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "spf_present",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "dmarc_present",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "dns_ttl_min",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "a_record_count",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "tls_issuer_free_ca",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "tls_age_days",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "tls_validity_days",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "tls_san_count",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "tranco_rank_bucket",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "hosting_asn_risk",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "hosting_country_risk",
+      "group": "reputation",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "has_password_field",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "has_card_field",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "has_otp_field",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "form_action_cross_domain",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "null_action_form",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "external_script_ratio",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "external_css_ratio",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "hidden_iframe_count",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "js_obfuscation_score",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "right_click_disabled",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "meta_refresh_present",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "title_domain_overlap",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "urgency_keyword_score",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "text_to_html_ratio",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "login_form_on_unknown_domain",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "external_link_ratio",
+      "group": "page_content",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "redirect_count",
+      "group": "redirect",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "cross_domain_redirect",
+      "group": "redirect",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "final_domain_changed",
+      "group": "redirect",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "shortener_expanded",
+      "group": "redirect",
+      "missing_fill": -1.0
+    },
+    {
+      "name": "redirect_chain_length",
+      "group": "redirect",
+      "missing_fill": -1.0
+    }
+  ]
+}

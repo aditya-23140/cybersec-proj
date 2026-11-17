@@ -149,47 +149,109 @@ export function RiskMeter({ probability = 0, risk = "unknown" }) {
 }
 
 const reasonText = {
-  c_form_action_external:
-    "the login form sends your data to a different website",
+  // Legacy mappings for backwards compatibility
+  c_form_action_external: "the login form sends your data to a different website",
   c_has_password: "the page asks for a password",
-  c_claimed_brand_mismatch:
-    "the page claims a brand that does not match its domain",
+  c_claimed_brand_mismatch: "the page claims a brand that does not match its domain",
   t_lookalike_dist: "the domain looks very close to a popular brand",
   t_brand_in_domain: "a brand name appears in an unrelated domain",
   subdomain_len: "the domain has an unusually long subdomain",
   dots_host: "the hostname has several nested sections",
   suspicious_path_keyword: "the URL path uses language common in scam pages",
+  // FihhGuard v2 Schema Feature mappings
+  url_length: "the URL is unusually long",
+  hostname_length: "the hostname is unusually long",
+  path_length: "the URL path is unusually deep or long",
+  query_length: "the URL query string is unusually long",
+  url_entropy: "the URL has high character randomness",
+  hostname_entropy: "the hostname has high character randomness",
+  subdomain_depth: "the domain has an unusually high number of subdomains",
+  tld_risk_score: "the top-level domain is associated with elevated phishing risk",
+  has_ip_host: "the URL uses a raw numeric IP address instead of a domain name",
+  has_userinfo: "the URL embeds credentials (@ in host), a deceptive tactic",
+  has_punycode: "the hostname uses Punycode encoding, possible homograph attack",
+  idn_homograph_score: "the domain uses characters visually mimicking another brand",
+  shortener_flag: "the URL uses a known link-shortening service",
+  shared_hosting_flag: "the site is hosted on a free or shared hosting platform",
+  qty_dots_url: "the URL contains an unusual number of dots",
+  qty_hyphens_url: "the URL contains multiple hyphens",
+  brand_edit_distance_min: "the domain closely resembles a known brand name",
+  brand_homoglyph_score: "the domain uses lookalike characters to mimic a brand",
+  brand_keyword_in_subdomain: "a well-known brand name is embedded in an unrelated subdomain",
+  brand_keyword_in_path: "a well-known brand name appears inside the URL path",
+  page_claimed_brand_mismatch: "the page claims to be a brand that does not match its domain",
+  has_password_field: "the page contains a credential or password input field",
+  has_card_field: "the page asks for credit card or payment details",
+  has_otp_field: "the page asks for a two-factor one-time passcode (OTP)",
+  form_action_cross_domain: "the login form submits credentials to a different website",
+  null_action_form: "the form has no destination, a common data harvesting pattern",
+  hidden_iframe_count: "the page embeds hidden iframes",
+  js_obfuscation_score: "JavaScript code on the page is obfuscated",
+  right_click_disabled: "right-click is disabled to prevent security inspection",
+  meta_refresh_present: "the page forces a silent meta-refresh redirect",
+  urgency_keyword_score: "the page uses urgent or threatening language to trick users",
+  redirect_count: "the link redirects multiple times through a redirect chain",
+  external_css_ratio: "the page references external third-party styling",
+  external_script_ratio: "the page loads scripts from third-party websites",
+  external_link_ratio: "links on the page predominantly lead outside the site",
+  text_to_html_ratio: "the page has very little text relative to code (cloned template pattern)",
+  login_form_on_unknown_domain: "a login form is hosted on an unverified or untrusted domain",
+  title_domain_overlap: "the page title does not match the domain identity",
 };
 
-export function ReasonList({ reasons = [], limit = 3 }) {
-  const items = reasons.slice(0, limit);
+export function ReasonList({ reasons = [], limit = 4 }) {
+  const items = (Array.isArray(reasons) ? reasons : []).slice(0, limit);
   if (!items.length)
     return <p className="muted">no single signal did all the talking.</p>;
   return (
     <ul className="reason-list">
-      {items.map((reason, index) => (
-        <li key={`${reason.feature}-${index}`}>
-          <span aria-hidden="true">→</span>
-          {reasonText[reason.feature] ||
-            `the URL has a ${String(reason.feature).replaceAll("_", " ")} signal`}
-        </li>
-      ))}
+      {items.map((reason, index) => {
+        let text = "";
+        let key = index;
+        if (typeof reason === "string") {
+          text = reason;
+          key = `str-${index}-${reason.slice(0, 15)}`;
+        } else if (reason && typeof reason === "object") {
+          const feat = reason.feature || reason.name || "";
+          key = `${feat || "item"}-${index}`;
+          text =
+            reason.reason ||
+            reason.description ||
+            (feat && reasonText[feat]) ||
+            (feat
+              ? `the URL has a ${String(feat).replaceAll("_", " ")} signal`
+              : "anomalous pattern detected by security model");
+        } else {
+          text = String(reason);
+          key = `val-${index}`;
+        }
+        return (
+          <li key={key}>
+            <span aria-hidden="true">→</span>
+            {text}
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
 export function ScanModeBadge({ mode }) {
-  const full = mode === "url+content";
+  const isHybrid =
+    mode === "url+content" ||
+    mode === "full" ||
+    mode === "hybrid" ||
+    mode === "url-hybrid";
   return (
     <span
       className="mode-badge"
       title={
-        full
-          ? "URL pattern plus sanitized page structure."
+        isHybrid
+          ? "URL pattern plus analyzed page structure and HTML content."
           : "URL pattern only; page content was not available."
       }
     >
-      {full ? "full scan" : "link-only scan"}
+      {isHybrid ? "full page scan ✓" : "link-only scan"}
     </span>
   );
 }

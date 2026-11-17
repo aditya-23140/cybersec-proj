@@ -3,7 +3,7 @@ main.py — FastAPI application factory.
 
 Startup order:
   1. Initialise SQLite schema (and admin seed) via init_db().
-  2. Load PhishingPredictor from ml/ artifacts via load_predictor().
+  2. Invoke load_predictor() (stub — model unavailable until Phase 1).
   3. Mount all routers under /api/v1.
 
 CORS is restricted to CORS_ORIGINS from config (default: localhost:3000).
@@ -113,11 +113,8 @@ def health():
 
 @app.get(f"{PREFIX}/model-info")
 def model_info():
-    from services.predictor import get_model_kind, get_threshold_config, is_model_loaded
-    return {
-        "model_version": config.MODEL_VERSION,
-        "artifacts_dir": config.ML_ARTIFACTS_DIR,
-        "model_loaded": is_model_loaded(),
-        "threshold_config": get_threshold_config(),
-        "model_kind": get_model_kind(),
-    }
+    from services.predictor import get_model_info, get_model_kind, is_model_loaded
+    info = get_model_info()
+    info["model_kind"] = get_model_kind()
+    info["model_loaded"] = is_model_loaded()
+    return info

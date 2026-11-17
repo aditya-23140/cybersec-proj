@@ -55,6 +55,11 @@ class PredictResponse(BaseModel):
     model_version: str
     model_mode: str = "url-only"
     content_ignored: bool = False
+    groups_missing: list[str] = []
+    schema_version: str | None = None
+    training_cutoff: str | None = None
+    model_status: str = "ok"      # "ok" | "experimental" | "unavailable"
+    model_available: bool = True
     fetch_error: str | None = None
     warnings: list[str]
     explanation: str

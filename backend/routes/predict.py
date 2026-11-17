@@ -17,7 +17,6 @@ from database import get_db
 from routes.auth import get_optional_user
 from schemas import ErrorResponse, PredictRequest, PredictResponse
 from services import predictor as predictor_svc
-from services.network_enrichment import enrich_url
 from services.risk_policy import apply_policy
 
 logger = logging.getLogger(__name__)
@@ -193,13 +192,17 @@ def _build_explanation(raw: dict, source: str) -> str:
             "address through an official source."
         )
     else:
-        explanation = raw.get("explanation", "")
-        if not isinstance(explanation, str) or not explanation.strip():
-            explanation = (
-                "The URL structure did not show strong phishing indicators. "
-                "This result is not proof that the website is safe."
-            )
-    return explanation + _network_explanation(raw)
+        reasons = raw.get("reasons", [])
+        risk = raw.get("risk_level", "safe")
+        if risk in ("dangerous", "phishing") and reasons:
+            top_texts = [r.get("reason", str(r)) if isinstance(r, dict) else str(r) for r in reasons[:3]]
+            explanation = f"The machine learning model detected high-risk phishing indicators: {'; '.join(top_texts)}."
+        elif risk == "suspicious" and reasons:
+            top_texts = [r.get("reason", str(r)) if isinstance(r, dict) else str(r) for r in reasons[:3]]
+            explanation = f"The machine learning model flagged anomalous URL patterns: {'; '.join(top_texts)}."
+        else:
+            explanation = "The URL structure was analyzed by the model and did not show significant phishing indicators."
+    return explanation
 
 
 # --------------------------------------------------------------------------- #
@@ -250,12 +253,23 @@ def predict(
             allowlist_domains = models.get_all_allowlist_domains(conn, current_user["id"])
 
     # ------------------------------------------------------------------ #
-    # 4. Run model
+    # 4. Run model (with server-side page fetch for hybrid analysis)
     # ------------------------------------------------------------------ #
+    page_html = body.page_html
+    fetch_error_msg: str | None = None
+
+    if page_html is None and getattr(config, "ENABLE_PAGE_FETCH", True):
+        from services.page_fetcher import fetch_page_html
+        timeout = getattr(config, "PAGE_FETCH_TIMEOUT", 5.0)
+        max_bytes = getattr(config, "PAGE_FETCH_MAX_BYTES", 300000)
+        page_html = fetch_page_html(url, timeout=timeout, max_bytes=max_bytes)
+        if page_html is None:
+            fetch_error_msg = "page could not be fetched"
+
     try:
         raw = predictor_svc.predict(
             url,
-            page_html=body.page_html,
+            page_html=page_html,
             page_signals=body.page_signals.model_dump() if body.page_signals else None,
         )
     except RuntimeError:
@@ -276,11 +290,10 @@ def predict(
         )
     if body.page_signals is not None:
         raw["page_signals"] = body.page_signals.model_dump()
-    try:
-        raw["network_signals"] = enrich_url(url)
-    except ValueError as exc:
-        logger.warning("Network enrichment skipped: %s", exc)
-        raw["network_signals"] = {"enrichment_enabled": False}
+    if fetch_error_msg and not raw.get("fetch_error"):
+        raw["fetch_error"] = fetch_error_msg
+    # Pure model inference: no external 3rd-party network or threat-intel enrichment
+    raw["network_signals"] = {"enrichment_enabled": False}
 
     # ------------------------------------------------------------------ #
     # 5. Apply risk policy

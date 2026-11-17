@@ -4,7 +4,7 @@
 !.env.example
 *.key
 *.pem
-
+.pkgs
 # Python
 __pycache__/
 *.py[cod]
@@ -72,3 +72,4 @@ Thumbs.db
 !.vscode/launch.json
 *.swp
 *.swo
+/archive/
