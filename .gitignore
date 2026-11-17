@@ -36,6 +36,7 @@ htmlcov/
 .nox/
 
 # Backend local state
+phishing.db
 backend/*.db
 backend/*.db-*
 *.sqlite
