@@ -63,3 +63,26 @@ def test_predict_url_length_limit(client):
     resp = client.post("/api/v1/predict", json={"url": long_url})
     assert resp.status_code == 422
 
+
+def test_predict_strips_query_and_fragment_on_store(client):
+    """Query parameters and fragments must be stripped before persisting to scans.url."""
+    from database import get_db
+
+    with get_db() as conn:
+        conn.execute("DELETE FROM scans")
+
+    full_url = "https://example.com/reset-password?token=secret123&email=user@domain.com#step-2"
+    resp = client.post("/api/v1/predict", json={"url": full_url})
+    assert resp.status_code == 200
+
+    with get_db() as conn:
+        row = conn.execute("SELECT url FROM scans ORDER BY id DESC LIMIT 1").fetchone()
+        assert row is not None
+        stored_url = row["url"]
+        assert stored_url == "https://example.com/reset-password"
+        assert "token" not in stored_url
+        assert "secret123" not in stored_url
+        assert "email" not in stored_url
+        assert "step-2" not in stored_url
+
+

@@ -251,14 +251,16 @@ def predict(
     explanation = _build_explanation(raw, source)
 
     # ------------------------------------------------------------------ #
-    # 6. Persist scan to DB (log at DEBUG to avoid leaking URL params)
+    # 6. Persist scan to DB (strip query string and fragment to prevent leaking sensitive tokens/PII)
     # ------------------------------------------------------------------ #
     try:
+        parsed_url = urlparse(url)
+        stored_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}"
         with get_db() as conn:
             models.insert_scan(
                 conn,
                 user_id=current_user["id"] if current_user else None,
-                url=url,
+                url=stored_url,
                 prediction=prediction,
                 risk_level=risk_level,
                 phishing_probability=probability,

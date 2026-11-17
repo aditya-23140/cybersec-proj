@@ -281,8 +281,9 @@ Thresholds are selected on the validation set during model evaluation. See `ml/v
 
 - Passwords are hashed with bcrypt (never stored in plaintext)
 - JWTs expire after 24 hours
-- CORS restricted to `http://localhost:3000` by default
-- Bounded SSRF-safe page fetch can be disabled via `ENABLE_PAGE_FETCH=false`
+- CORS restricted to `http://localhost:3000` by default (configurable, with dedicated extension ID regex support)
+- Bounded SSRF-safe page fetch defaults to OFF (`ENABLE_PAGE_FETCH=false`)
+- **Scan Data Retention & Privacy:** Raw query strings and fragments (which may contain reset tokens, session IDs, or PII) are stripped before persisting to `scans.url`. The database only stores `scheme://domain/path`. The full URL is used solely in memory during model inference.
 - Forum input is stored as plain text and escaped on render
 - User data is isolated server-side; one user cannot access another's history/lists
 
