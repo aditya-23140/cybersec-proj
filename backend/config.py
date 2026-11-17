@@ -58,7 +58,7 @@ CORS_ORIGINS: list[str] = os.getenv(
 # --------------------------------------------------------------------------- #
 # Server-side page fetch (hybrid scanning)
 # --------------------------------------------------------------------------- #
-ENABLE_PAGE_FETCH: bool = os.getenv("ENABLE_PAGE_FETCH", "true").lower() == "true"
+ENABLE_PAGE_FETCH: bool = os.getenv("ENABLE_PAGE_FETCH", "false").lower() == "true"
 PAGE_FETCH_TIMEOUT: float = float(os.getenv("PAGE_FETCH_TIMEOUT", "5.0"))
 PAGE_FETCH_MAX_BYTES: int = int(os.getenv("PAGE_FETCH_MAX_BYTES", "300000"))
 
