@@ -18,36 +18,18 @@ Both the **extension** and the **web app** call the **same** backend prediction 
 
 ### Hybrid model diagnostics
 
-The backend loads `ml/artifacts/hybrid.joblib` by default. When `page_html` is
+The backend loads `ml/v2/artifacts/bundle.pkl.gz` by default. When `page_html` is
 provided (the extension sends a sanitized rendered DOM), inference runs in
-`url+content` mode. Otherwise the backend performs the bounded SSRF-safe fetch
-unless `HYBRID_FETCH_ENABLED=false`; a failed or disabled fetch remains visible
+`url+content` mode. Otherwise the backend performs bounded SSRF-safe page fetch
+unless `ENABLE_PAGE_FETCH=false`; a failed or disabled fetch remains visible
 as `fetch_error` in the response instead of being silently treated as a full
-scan. Exact registered popular domains are trusted only at the registered
-domain/`www` host and only when they are in the first 10,000 rows of the
-configured Tranco file; arbitrary hosting subdomains are still scored. The
-rank feature remains available for ranks through 1M and is not disabled by
-`--no-popular-trust`.
+scan. Exact registered popular domains are checked against the top domains list
+to identify brand impersonation attempts.
 
-Reproduce the current training/evaluation run with:
+Run the ML test suite with:
 
 ```bash
-cd ml
-python data_pipeline.py internal-links \
-  --tranco data/tranco/top-1m.csv --start 10001 --end 900000 \
-  --domains 500 --limit 5000 --out data/real_legitimate_paths_train.csv
-python data_pipeline.py verify \
-  --csv data/real_legitimate_paths_train.csv \
-  --out data/real_legitimate_paths_train_verified.csv
-python phishing_hybrid.py train \
-  --data data/phiusiil.csv,URL,label,0 \
-  --data data/real_legitimate_paths_train_verified.csv,url,label,1 \
-  --data data/hybrid_snapshot_dataset/benign.csv,url,label,1 \
-  --data data/hybrid_snapshot_dataset/phishing.csv,url,label,1 \
-  --snapshots data/hybrid_snapshot_merged \
-  --top-domains data/tranco/top-1m.csv --top-n 1000000 \
-  --out artifacts/hybrid.joblib --n-iter 25 --workers 4
-pytest -q tests/test_legitimate_sanity.py
+pytest ml/v2/tests/ ml/v2/features/tests/ ml/v2/training/tests/ -v
 ```
 
 ---
@@ -66,67 +48,30 @@ pytest -q tests/test_legitimate_sanity.py
 cd ml
 
 # Install Python dependencies
-pip install xgboost scikit-learn pandas numpy requests tldextract pytest
+pip install -r requirements.txt
 
-# Train the URL-only baseline
-python -m src.train --seed 42
+# Train the v2 model bundle
+python -m ml.v2.training.cli train
 
 # Run ML tests
-python -m pytest tests/ -v
+pytest v2/tests/ v2/features/tests/ v2/training/tests/ -v
 ```
 
-**Artifacts produced** in `ml/artifacts/`:
-- `model.ubj` — trained XGBoost model
-- `feature_schema.json` — feature names and fallback values
-- `threshold_config.json` — thresholds selected on validation set
-- `metadata.json` — training provenance
-- `eval_results.json` — actual measured metrics
+**Artifacts produced** in `ml/v2/artifacts/`:
+- `bundle.pkl.gz` — trained LightGBM model, Platt calibrator, and feature schema
+- `evaluation_report.json` — measured metrics across validation and test splits
 
-> ⚠️ Metrics in `eval_results.json` are real measurements from this run.  
-> The paper's reported results (90.7% accuracy, 91.2% F1) are **not** reproduced here — they are from a different dataset and experimental setup.
+### Standalone model CLI
 
-### Standalone URL + page-content model
-
-The backend prefers `artifacts/hybrid.joblib` and falls back to the legacy
-URL-only artifact when the hybrid bundle is unavailable. The extension sends
-aggregate page signals plus a bounded DOM snapshot with form values removed;
-the backend does not persist that snapshot.
+The ML v2 package provides an all-in-one CLI for training, evaluation, and inference:
 
 ```bash
-cd ml
-python phishing_hybrid.py train \
-  --data data/phiusiil.csv,URL,label,0 \
-  --data data/hybrid_snapshot_dataset/benign.csv,url,label,1 \
-  --data data/hybrid_snapshot_dataset/phishing.csv,url,label,1 \
-  --data data/real_legitimate_paths_train.csv,url,label,1 \
-  --top-domains data/tranco/top-1m.csv \
-  --top-n 10000 \
-  --rank-n 1000000 \
-  --n-iter 25 \
-  --out artifacts/hybrid.joblib
+# Evaluate against quality gates
+python -m ml.v2.training.cli evaluate
+
+# Run CLI prediction on a URL
+python -m ml.v2.training.cli predict "https://example.com"
 ```
-
-Without a DOM snapshot, content features are missing and the model operates in
-URL-only mode. To enable page-content features during training, crawl labelled
-URLs first and pass the snapshot directory with `--snapshots`.
-
-The snapshot guard (5,000 successful snapshots per class and 20% coverage) is
-enforced only when `--snapshots` is supplied. URL-only training records
-`content_trained=false`; the API reports `model_mode: "url-only"` and
-`content_ignored: true`.
-
-Daily collection must run in a dedicated isolated VM/container:
-
-```bash
-python data_pipeline.py collect-daily \
-  --snapshots data/hybrid_snapshot_dataset \
-  --tranco data/tranco/top-1m.csv --isolated
-```
-
-Feed credentials are read from `OPENPHISH_API_KEY`, `PHISHTANK_APP_KEY`, and
-`URLHAUS_API_KEY` (with optional `*_FEED_URL` overrides). The collector writes
-`snapshot_manifest.csv` with source and fetch time, filters URLhaus to phishing
-or credential-harvesting tags, and prints coverage/dead-on-arrival metrics.
 
 ---
 
@@ -301,38 +246,29 @@ Base URL: `http://127.0.0.1:8000`
 | `suspicious_path_keyword` | URL path/query | Always available |
 | `is_domain_ip`, `has_obfuscation`, `digit_ratio_url` | URL/dataset fields | Always available |
 
-The trained model contains no synthetic DNS/WHOIS fallback values. When
-`ENABLE_NETWORK_ENRICHMENT=true` (the default), the API also performs bounded
-DNS, WHOIS, TLS-certificate, and optional URLhaus checks at prediction time.
-These live signals are returned as `network_signals`; unavailable checks remain
-explicitly unavailable and are never treated as proof that a site is safe.
+The trained model contains no synthetic DNS/WHOIS fallback values. Prediction runs
+as pure local ML inference with optional bounded page fetching for hybrid scanning.
+External 3rd-party network enrichment (DNS, WHOIS, URLhaus) has been retired in favor
+of pure ML scoring, with `network_signals` preserved for API compatibility.
 
 The product uses a hybrid decision architecture. The URL model produces a
 calibrated `url_model_score` as supporting evidence, while the final assessment
 is produced by the evidence policy. Reputation hits, credential-harvesting page
-signals, invalid TLS, and brand lookalikes take precedence over model output.
-Verified official domains can reduce false positives only after successful live
-verification. API responses expose `domain_identity` and `evidence_summary`
-separately so the displayed final result is not confused with the URL score.
-
-Training uses registrable-domain grouped splits so URLs from one domain cannot
-appear in both training and evaluation. The persisted `calibration.json`
-contains Platt-scaling parameters for the URL-model score.
+signals, and brand lookalikes take precedence over model output.
 
 ### Risk Thresholds
 
-Thresholds are **selected from the validation set** using F1 maximization — not copied from the paper. See `ml/artifacts/threshold_config.json` after training.
+Thresholds are selected on the validation set during model evaluation. See `ml/v2/evaluation_report.json`.
 
 ---
 
 ## 8. Known Limitations
 
-- **Coverage limits:** The hybrid model analyses URL patterns and, when supplied, a bounded sanitized DOM snapshot. The browser extension can also add live DNS, WHOIS, TLS, and reputation signals. None of these independently verifies website ownership or page safety.
+- **Coverage limits:** The hybrid model analyses URL patterns and, when supplied, a bounded sanitized DOM snapshot. None of these independently verifies website ownership or page safety.
 - **False positives:** Legitimate sites with brand keywords or unusual URL structures may be flagged.
-- **Cross-dataset degradation:** As shown in the research paper, performance on URLs from different sources/time periods is typically lower than in-distribution test performance.
+- **Cross-dataset degradation:** As shown in research, performance on URLs from different sources/time periods is typically lower than in-distribution test performance.
 - **No real-time updates:** The model is static post-training. New phishing patterns require retraining.
 - **Extension scope:** The extension only intercepts link clicks via content scripts, not address-bar navigation or all redirect chains.
-- **Synthetic fallback:** If the PhiUSIIL dataset cannot be downloaded, training uses a synthetic dataset. Metrics from synthetic training are clearly labeled and do not represent real-world performance.
 
 ---
 
@@ -341,7 +277,7 @@ Thresholds are **selected from the validation set** using F1 maximization — no
 - Passwords are hashed with bcrypt (never stored in plaintext)
 - JWTs expire after 24 hours
 - CORS restricted to `http://localhost:3000` by default
-- The prediction endpoint does **not** fetch or visit URLs — only URL string analysis
+- Bounded SSRF-safe page fetch can be disabled via `ENABLE_PAGE_FETCH=false`
 - Forum input is stored as plain text and escaped on render
 - User data is isolated server-side; one user cannot access another's history/lists
 
@@ -351,22 +287,18 @@ Thresholds are **selected from the validation set** using F1 maximization — no
 
 ```
 cybersec-proj/
-├── ml/                    # Training pipeline
-│   ├── src/
-│   │   ├── feature_extractor.py   # SHARED — also used by backend
-│   │   ├── train.py
-│   │   ├── evaluate.py
-│   │   ├── predict.py             # PhishingPredictor class
-│   │   ├── data_loader.py
-│   │   ├── data_validation.py
-│   │   ├── preprocessing.py
-│   │   └── model_registry.py
-│   ├── artifacts/         # Model artifacts (generated by training)
+├── ml/                    # ML pipeline & v2 architecture
+│   ├── v2/
+│   │   ├── features/      # Lexical, brand, content, redirect feature extractors
+│   │   ├── training/      # Dataset loaders, splitter, train, evaluate, bundle CLI
+│   │   ├── serving/       # Fast detector inference engine
+│   │   ├── data/          # Split manifest, data card, ingestion scripts
+│   │   └── artifacts/     # Model bundle (bundle.pkl.gz)
 │   └── tests/
 ├── backend/               # FastAPI server
 │   ├── main.py
 │   ├── routes/            # predict, auth, history, lists, forum, stats
-│   ├── services/          # predictor, risk_policy, auth_service
+│   ├── services/          # predictor, risk_policy, page_fetcher, auth_service
 │   └── tests/
 ├── extension/             # Chrome MV3 extension
 │   ├── manifest.json
@@ -374,8 +306,7 @@ cybersec-proj/
 │   ├── content.js         # Link click interceptor
 │   ├── warning.html/js    # Interstitial warning page
 │   └── popup.html/js      # Manual URL checker
-└── frontend/              # Next.js web app
-    ├── pages/             # index, dashboard, history, lists, forum/*, education, login, register
-    ├── components/        # Layout, RiskBadge, ScanResult
+└── frontend/              # Next.js web app (App Router)
+    ├── app/               # Next.js App Router pages
     └── lib/api.js         # API client
 ```
