@@ -1,6 +1,7 @@
 """
 backend/tests/test_predict.py
 """
+import pytest
 def test_health_returns_200(client):
     resp = client.get("/api/v1/health")
     assert resp.status_code == 200
@@ -48,3 +49,40 @@ def test_stats_returns_zero_on_empty_db(client):
     data = resp.json()
     assert data["total_scans"] == 0
     assert data["benign_count"] == 0
+
+
+def test_predict_url_length_limit(client):
+    """URLs exceeding 2048 characters must be rejected with 422."""
+    from pydantic import ValidationError
+    from schemas import PredictRequest
+
+    long_url = "https://example.com/" + "a" * 2050
+    with pytest.raises(ValidationError):
+        PredictRequest(url=long_url)
+
+    resp = client.post("/api/v1/predict", json={"url": long_url})
+    assert resp.status_code == 422
+
+
+def test_predict_strips_query_and_fragment_on_store(client):
+    """Query parameters and fragments must be stripped before persisting to scans.url."""
+    from database import get_db
+
+    with get_db() as conn:
+        conn.execute("DELETE FROM scans")
+
+    full_url = "https://example.com/reset-password?token=secret123&email=user@domain.com#step-2"
+    resp = client.post("/api/v1/predict", json={"url": full_url})
+    assert resp.status_code == 200
+
+    with get_db() as conn:
+        row = conn.execute("SELECT url FROM scans ORDER BY id DESC LIMIT 1").fetchone()
+        assert row is not None
+        stored_url = row["url"]
+        assert stored_url == "https://example.com/reset-password"
+        assert "token" not in stored_url
+        assert "secret123" not in stored_url
+        assert "email" not in stored_url
+        assert "step-2" not in stored_url
+
+

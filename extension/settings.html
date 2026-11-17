@@ -117,11 +117,18 @@
         />
       </section>
       <section class="setting">
+        <h2>page analysis</h2>
+        <p>by default, only URL and aggregate link/form counts are sent. You can optionally allow uploading a sanitized DOM snapshot for hybrid analysis.</p>
+        <label
+          ><input id="enable-dom-upload" type="checkbox" /> allow sanitized DOM upload (default OFF)</label
+        >
+      </section>
+      <section class="setting">
         <h2>privacy, plainly</h2>
         <p>
-          the extension sends the clicked URL and, after a page loads, aggregate
-          page signals plus a bounded DOM snapshot with form values removed. It
-          does not send cookies, passwords, or textarea values.
+          the extension checks the clicked URL and computes local aggregate page
+          counts. Sanitized DOM upload is disabled by default and can be enabled above.
+          It never sends cookies, passwords, or form values.
         </p>
       </section>
       <div>

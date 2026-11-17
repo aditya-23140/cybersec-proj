@@ -60,16 +60,21 @@ app = FastAPI(
 )
 
 # ── CORS ────────────────────────────────────────────────────────────────────
-# Allow the extension (chrome-extension://) and the Next.js frontend.
-allowed_origins = list(config.CORS_ORIGINS) + ["chrome-extension://*"]
+import os
+import re
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
-)
+cors_kwargs: dict[str, any] = {
+    "allow_origins": list(config.CORS_ORIGINS),
+    "allow_credentials": True,
+    "allow_methods": ["GET", "POST", "DELETE", "OPTIONS"],
+    "allow_headers": ["Authorization", "Content-Type"],
+}
+
+extension_id = os.getenv("EXTENSION_ID", "").strip()
+if extension_id:
+    cors_kwargs["allow_origin_regex"] = rf"^chrome-extension://{re.escape(extension_id)}$"
+
+app.add_middleware(CORSMiddleware, **cors_kwargs)
 
 # ── Routers ──────────────────────────────────────────────────────────────────
 from routes.auth import router as auth_router

@@ -18,10 +18,13 @@ Both the **extension** and the **web app** call the **same** backend prediction 
 
 ### Hybrid model diagnostics
 
-The backend loads `ml/v2/artifacts/bundle.pkl.gz` by default. When `page_html` is
-provided (the extension sends a sanitized rendered DOM), inference runs in
-`url+content` mode. Otherwise the backend performs bounded SSRF-safe page fetch
-unless `ENABLE_PAGE_FETCH=false`; a failed or disabled fetch remains visible
+The backend loads `ml/v2/artifacts/bundle.pkl.gz` by default. Scans operate
+in URL-only mode by default because server-side page fetching defaults to OFF
+(`ENABLE_PAGE_FETCH=false`). When `ENABLE_PAGE_FETCH=true` or when `page_html`
+is provided (e.g. if the user explicitly opts into extension DOM upload),
+inference runs in hybrid `url+content` mode. Server-side fetches enforce strict
+SSRF protections (pinning connections to validated non-private IPs, manual redirect
+re-validation, and TLS verification). A failed or disabled fetch remains visible
 as `fetch_error` in the response instead of being silently treated as a full
 scan. Exact registered popular domains are checked against the top domains list
 to identify brand impersonation attempts.
@@ -90,8 +93,10 @@ cp .env.example .env
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Set `JWT_SECRET_KEY` in `.env` to a stable, long random value. Tokens issued
-before changing this value are invalid and require signing in again.
+Set `JWT_SECRET_KEY` in `.env` to a strong random value (at least 32 characters, required).
+The server will refuse to start if it is missing or too short. Generate one using:
+`python -c "import secrets; print(secrets.token_hex(32))"`. Tokens issued before
+changing this value are invalid and require signing in again.
 
 **On first start:**
 - Creates `phishing.db` with full schema
@@ -276,8 +281,9 @@ Thresholds are selected on the validation set during model evaluation. See `ml/v
 
 - Passwords are hashed with bcrypt (never stored in plaintext)
 - JWTs expire after 24 hours
-- CORS restricted to `http://localhost:3000` by default
-- Bounded SSRF-safe page fetch can be disabled via `ENABLE_PAGE_FETCH=false`
+- CORS restricted to `http://localhost:3000` by default (configurable, with dedicated extension ID regex support)
+- Bounded SSRF-safe page fetch defaults to OFF (`ENABLE_PAGE_FETCH=false`)
+- **Scan Data Retention & Privacy:** Raw query strings and fragments (which may contain reset tokens, session IDs, or PII) are stripped before persisting to `scans.url`. The database only stores `scheme://domain/path`. The full URL is used solely in memory during model inference.
 - Forum input is stored as plain text and escaped on render
 - User data is isolated server-side; one user cannot access another's history/lists
 

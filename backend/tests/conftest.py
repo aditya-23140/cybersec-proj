@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Use in-memory SQLite for tests
 os.environ.setdefault("DATABASE_PATH", ":memory:")
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-not-for-production-use-32chars"
 
 import pytest
 from fastapi.testclient import TestClient
