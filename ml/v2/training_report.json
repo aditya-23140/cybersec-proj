@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-11-12T19:37:08.664953Z",
+  "best_hyperparameters": {
+    "subsample": 0.8,
+    "reg_lambda": 2.0,
+    "min_child_weight": 1,
+    "max_depth": 7,
+    "learning_rate": 0.03,
+    "colsample_bytree": 0.8
+  },
+  "cv_iterations": 25,
+  "n_train_fit": 181727,
+  "n_val": 36371,
+  "n_cal": 29776,
+  "t_phishing": 0.55,
+  "t_suspicious": 0.25,
+  "realistic_prior": 0.02
+}

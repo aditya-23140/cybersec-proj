@@ -1,0 +1,115 @@
+{
+  "timestamp": "2026-11-12T19:37:08.663790Z",
+  "gates_summary": {
+    "gate_1_benign_fpr": {
+      "status": "PASS",
+      "threshold": "<= 1.0% phish, <= 3.0% susp",
+      "achieved": "FPR_phish=0.15%, FPR_susp=2.51%"
+    },
+    "gate_2_phishing_recall": {
+      "status": "FAIL",
+      "threshold": ">= 80.0%",
+      "achieved": "63.32%"
+    },
+    "gate_3_auc_gap": {
+      "status": "PASS",
+      "threshold": "<= 0.05",
+      "achieved": "0.0184 (Train=0.9928, Test=0.9744)"
+    },
+    "gate_4_ece": {
+      "status": "FAIL",
+      "threshold": "<= 0.05",
+      "achieved": "0.1894"
+    },
+    "gate_5_length_quartile_auc": {
+      "status": "PASS",
+      "threshold": "Min AUC >= 0.90 across Q1-Q4",
+      "achieved": "Min=0.9677 (Q1=0.9794, Q2=0.9712, Q3=0.9677, Q4=0.9770)"
+    },
+    "gate_6_length_invariance": {
+      "status": "FAIL",
+      "threshold": "<= 2.0% legit flip to phish",
+      "achieved": "7.33% (22/300 flips)"
+    },
+    "gate_7_shuffled_label_auc": {
+      "status": "PASS",
+      "threshold": "0.40 <= AUC <= 0.60",
+      "achieved": "0.5267"
+    },
+    "gate_8_domain_overlap": {
+      "status": "PASS",
+      "threshold": "0 overlapping domains",
+      "achieved": "0"
+    }
+  },
+  "gates_failed": [
+    "gate_2_phishing_recall",
+    "gate_4_ece",
+    "gate_6_length_invariance"
+  ],
+  "metrics": {
+    "data_sources": ["phreshphish/phreshphish (Hugging Face)"],
+    "row_counts": {
+      "train_fit": 181727,
+      "val": 36371,
+      "cal": 29776,
+      "test": 26949
+    },
+    "date_ranges": {
+      "train": ["2024-07-02", "2025-09-08"],
+      "test": ["2025-09-08", "2025-12-16"]
+    },
+    "test_rocauc": 0.9744,
+    "test_prauc": 0.9841,
+    "train_rocauc": 0.9928,
+    "auc_gap": 0.0184,
+    "ece": 0.1894,
+    "fpr_phishing": 0.0015,
+    "recall_phishing": 0.6332,
+    "url_only_rocauc": 0.9518,
+    "url_only_recall": 0.6408,
+    "length_only_test_auc": 0.6136,
+    "gates_summary": {
+      "gate_1_benign_fpr": {
+        "status": "PASS",
+        "threshold": "<= 1.0% phish, <= 3.0% susp",
+        "achieved": "FPR_phish=0.15%, FPR_susp=2.51%"
+      },
+      "gate_2_phishing_recall": {
+        "status": "FAIL",
+        "threshold": ">= 80.0%",
+        "achieved": "63.32%"
+      },
+      "gate_3_auc_gap": {
+        "status": "PASS",
+        "threshold": "<= 0.05",
+        "achieved": "0.0184 (Train=0.9928, Test=0.9744)"
+      },
+      "gate_4_ece": {
+        "status": "FAIL",
+        "threshold": "<= 0.05",
+        "achieved": "0.1894"
+      },
+      "gate_5_length_quartile_auc": {
+        "status": "PASS",
+        "threshold": "Min AUC >= 0.90 across Q1-Q4",
+        "achieved": "Min=0.9677 (Q1=0.9794, Q2=0.9712, Q3=0.9677, Q4=0.9770)"
+      },
+      "gate_6_length_invariance": {
+        "status": "FAIL",
+        "threshold": "<= 2.0% legit flip to phish",
+        "achieved": "7.33% (22/300 flips)"
+      },
+      "gate_7_shuffled_label_auc": {
+        "status": "PASS",
+        "threshold": "0.40 <= AUC <= 0.60",
+        "achieved": "0.5267"
+      },
+      "gate_8_domain_overlap": {
+        "status": "PASS",
+        "threshold": "0 overlapping domains",
+        "achieved": "0"
+      }
+    }
+  }
+}
