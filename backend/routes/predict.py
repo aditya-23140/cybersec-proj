@@ -52,65 +52,6 @@ def _validate_url(url: str) -> None:
         )
 
 
-def _network_explanation(raw: dict) -> str:
-    network = raw.get("network_signals", {})
-    if not network or not network.get("enrichment_enabled", False):
-        return ""
-
-    details: list[str] = []
-    dns = network.get("dns", {})
-    if dns.get("dns_resolves"):
-        details.append("the website address resolved successfully")
-
-    whois = network.get("whois", {})
-    age = whois.get("domain_age_days")
-    if age is not None and age < 14:
-        details.append("the domain was registered recently")
-
-    tls = network.get("tls", {})
-    if tls.get("certificate_checked") and not tls.get("certificate_valid"):
-        details.append("the security certificate is invalid or does not match")
-
-    reputation = network.get("reputation", {})
-    provider = reputation.get("reputation_provider")
-    if reputation.get("reputation_hit"):
-        details.append(f"{provider or 'Configured reputation provider'} reported the URL")
-    elif provider and reputation.get("lookup_status") == "ok":
-        details.append("no known malicious report was found")
-
-    http_signals = network.get("http", {})
-    if http_signals:
-        status = http_signals.get("request_status")
-        if status == "ok":
-            details.append(
-                f"HTTP fetch returned status {http_signals.get('http_status')}"
-            )
-            if http_signals.get("redirect_count", 0):
-                details.append(
-                    f"{http_signals['redirect_count']} redirect(s) followed"
-                )
-            if http_signals.get("cross_domain_redirect"):
-                details.append("redirect crossed to another domain")
-            if http_signals.get("has_password_field"):
-                details.append("page contains a password field")
-            if http_signals.get("external_form_count", 0):
-                details.append("page contains an external form")
-            if http_signals.get("suspicious_text_hits", 0):
-                details.append(
-                    f"{http_signals['suspicious_text_hits']} suspicious text match(es)"
-                )
-        elif status in {"timeout", "error", "unavailable"}:
-            details.append("the website could not be reached for content verification")
-
-    return (
-        " Additional checks found "
-        + "; ".join(details)
-        + "."
-        if details
-        else ""
-    )
-
-
 def _build_explanation(raw: dict, source: str) -> str:
     explanation: str
     if source == "blocklist":

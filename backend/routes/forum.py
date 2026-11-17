@@ -13,7 +13,6 @@ from database import get_db
 from routes.auth import get_current_user
 from schemas import (
     ForumPostCreate,
-    ForumPostDetail,
     ForumPostResponse,
     ForumReplyCreate,
     ForumReplyResponse,

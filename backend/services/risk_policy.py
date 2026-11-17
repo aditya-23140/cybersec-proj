@@ -76,69 +76,6 @@ def probability_to_risk_level(probability: float, thresholds: dict | None = None
     return "safe"
 
 
-def _live_verification_status(url: str, network: dict) -> tuple[bool, list[str]]:
-    """Return whether live checks corroborate a safe result."""
-    reasons: list[str] = []
-    dns = network.get("dns", {})
-    http = network.get("http", {})
-    tls = network.get("tls", {})
-
-    if not dns.get("dns_resolves", False):
-        reasons.append("the hostname did not resolve in DNS")
-    if http.get("request_status") != "ok":
-        reasons.append("the page could not be fetched")
-    if urlparse(url).scheme.lower() == "https":
-        if not tls.get("certificate_checked", False):
-            reasons.append("the HTTPS certificate could not be verified")
-        elif not tls.get("certificate_valid", False):
-            reasons.append("the HTTPS certificate is invalid or mismatched")
-    return not reasons, reasons
-
-
-def _official_domain_verified(url: str, network: dict) -> bool:
-    """Verify domain identity without requiring a page fetch to finish."""
-    dns = network.get("dns", {})
-    if not dns.get("dns_resolves", False):
-        return False
-
-    if urlparse(url).scheme.lower() == "https":
-        tls = network.get("tls", {})
-        if not tls.get("certificate_checked") or not tls.get("certificate_valid"):
-            return False
-
-    http = network.get("http", {})
-    if http.get("cross_domain_redirect"):
-        return False
-    return http.get("request_status") in {"ok", "timeout"}
-
-
-def _verification_status(url: str, network: dict, official_domain: bool) -> str:
-    """Report evidence completeness separately from phishing risk."""
-    if not network or not network.get("enrichment_enabled", False):
-        return "unverified"
-
-    dns = network.get("dns", {})
-    tls = network.get("tls", {})
-    http = network.get("http", {})
-
-    if dns.get("lookup_status") == "nxdomain" or (dns.get("dns_resolves") is False and dns.get("lookup_status") not in ("timeout", "temporary_failure")):
-        return "failed"
-
-    if urlparse(url).scheme.lower() == "https" and (
-        tls.get("lookup_status") == "invalid_certificate"
-        or (tls.get("certificate_checked") and not tls.get("certificate_valid"))
-    ):
-        return "failed"
-
-    if http.get("cross_domain_redirect") and http.get("has_password_field"):
-        return "failed"
-
-    if http.get("request_status") != "ok":
-        return "partial" if official_domain else "incomplete"
-
-    return "verified"
-
-
 # --------------------------------------------------------------------------- #
 # Policy application
 # --------------------------------------------------------------------------- #
